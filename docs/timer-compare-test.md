@@ -59,14 +59,64 @@ the insertion point for input, simulation, collision, and rendering code.
 
 ## Physical measurement
 
-1. Build and load `build/space-invaders.c10` with the normal MC-10/XRoar
-   workflow, or load the binary on a physical MC-10.
-2. Confirm that the display changes from `TIMER: WAIT` to `TIMER: OK`.
-3. Probe the MC6847 `FS` output and the P2.0 marker with a two-channel
+### Exact XRoar cassette sequence
+
+The MCX-128 is a RAM expansion. It does not load or execute cassette data. In
+the project configuration, XRoar boots the stock MC-10 ROM and attaches the
+MCX-128 RAM profile, so the MC-10 cassette commands remain part of the load
+sequence.
+
+From PowerShell, use the project launcher:
+
+```text
+.\space-invaders.ps1 build
+.\space-invaders.ps1 run
+```
+
+The launcher runs:
+
+```text
+xroar -machine mc10 -cart mcx128 -run build/space-invaders.c10
+```
+
+XRoar's `-run` option attaches the `.c10` image and types `CLOADM` for a
+machine-code image. The MC-10 has no remote cassette motor-control line, so
+the tape starts paused. Complete the load as follows:
+
+1. Focus the emulated MC-10 display and wait for the `CLOADM` command to
+   appear, then press `Enter` if XRoar has not already done so.
+2. Press `Ctrl+T` to open XRoar's cassette-controls window.
+3. Select the `Input` tab, verify that `SPACEINV` is the selected tape, and
+   press `Play` once. `Pause` becomes enabled while the tape is running.
+4. Close the cassette-controls window if required, return focus to the MC-10,
+   and wait for the load to finish and the `OK` prompt to appear.
+5. Type `EXEC` and press `Enter` to start the loaded program.
+
+For a fully manual command-line setup, replace `-run` with `-load-tape`:
+
+```text
+xroar -machine mc10 -cart mcx128 -load-tape build/space-invaders.c10
+```
+
+Then type `CLOADM`, press `Enter`, open cassette controls with `Ctrl+T`, press
+`Play`, wait for `OK`, and type `EXEC` followed by `Enter`. `-load-tape` only
+attaches the image; it does not enter the load command. Do not press `Reset`
+between entering `CLOADM` and starting the tape.
+
+After execution starts, confirm that the display changes from `TIMER: WAIT` to
+`TIMER: OK`, then that the `FRAME: 0000` counter advances.
+
+For a physical MC-10, use the equivalent keyboard and cassette-player
+actions: enter `CLOADM`, press `Enter`, start the cassette manually, wait for
+`OK`, then enter `EXEC` and press `Enter`.
+
+### Physical signal capture
+
+1. Probe the MC6847 `FS` output and the P2.0 marker with a two-channel
    oscilloscope or logic analyzer. The MC6847 datasheet identifies `FS` as
    the field-sync output; use the [MC-10 schematic](https://raw.githubusercontent.com/Danjovic/MC-10/main/MC-10%20Schematics.pdf)
    to locate the corresponding pin or test point.
-4. Measure the marker period and its phase relative to `FS`. P2.0 toggles on
+2. Measure the marker period and its phase relative to `FS`. P2.0 toggles on
    every timer event, so each rising edge spans two predicted fields. Compare
    the marker's rising or falling edge to the same edge of `FS` over the full
    60-event run.

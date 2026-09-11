@@ -37,7 +37,7 @@ xroar -machine mc10 -cart mcx128 -run build/space-invaders.c10
 physical expansion boots in external-ROM mode and requires a suitable EPROM;
 the XRoar cassette test uses the stock MC-10 ROM plus the emulated MCX-128 RAM.
 
-MC-10 cassette emulation starts paused because the real machine has no remote motor-control line. XRoar's `-run` path attaches the cassette and types `CLOADM`; start the tape, then type `EXEC` after the load completes. If using the graphical controls manually, start the tape after the load command appears.
+MC-10 cassette emulation starts paused because the real machine has no remote motor-control line. XRoar's `-run` path attaches the cassette and types `CLOADM`; open cassette controls with `Ctrl+T`, press `Play`, then type `EXEC` after the load completes. The MCX-128 is only the RAM expansion in this setup. See [the exact cassette sequence](docs/timer-compare-test.md#exact-xroar-cassette-sequence) for the `-load-tape` manual path.
 
 Use `.\space-invaders.ps1 check` to validate tool and source prerequisites without launching the emulator. Use `.\space-invaders.ps1 clean` to remove generated artifacts.
 
