@@ -89,9 +89,11 @@ compare; it should not assume that MC6847 field sync invokes a handler.
 
 The current executable includes a [timer-compare cadence test](timer-compare-test.md).
 It schedules 60 output compares at `$3A56` E clocks, displays the result, and
-toggles P2.0 for external comparison with the MC6847 `FS` signal. This verifies
-timer-driven cadence, while an oscilloscope or logic analyzer is still required
-to verify the phase relationship to physical `FS`.
+toggles P2.0 for external comparison with the MC6847 `FS` signal. On success,
+the same compare schedule is re-armed and drives the game-loop scaffold one
+queued update per predicted field. This verifies timer-driven cadence, while an
+oscilloscope or logic analyzer is still required to verify the phase relationship
+to physical `FS`.
 
 ## Base memory map
 

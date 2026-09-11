@@ -45,10 +45,17 @@ machine, so do not connect active cassette or serial equipment while using the
 marker.
 
 The stock ROM's RAM-resident output-compare vector is normally an immediate
-`RTI`; the test temporarily replaces it and restores normal timer state before
-returning to the idle loop. The screen displays `TIMER: WAIT`, then `TIMER:
-OK` after all 60 events, or `TIMER: FAIL` if the interrupt does not complete
-within the timeout.
+`RTI`; the test claims that private vector for the diagnostic and subsequent
+game-loop scaffold. The screen displays `TIMER: WAIT`, then `TIMER: OK` after
+all 60 events, or `TIMER: FAIL` if the interrupt does not complete within the
+timeout. After `TIMER: OK`, the program re-arms the same interval and enters
+the game-loop scaffold, where the `FRAME: 0000` counter advances once per
+queued timer event.
+
+The interrupt handler remains short: it schedules the next compare, toggles
+P2.0, and either counts diagnostic events or increments the pending-tick byte.
+The foreground loop consumes pending ticks and calls `game_update`, which is
+the insertion point for input, simulation, collision, and rendering code.
 
 ## Physical measurement
 

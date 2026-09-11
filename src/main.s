@@ -1,6 +1,7 @@
 ; Space Invaders for the Tandy MC-10.
 ;
-; This is the first platform smoke test. It is deliberately self-contained:
+; This is the first platform smoke test and timer-driven game-loop scaffold.
+; It is deliberately self-contained:
 ; it does not depend on BASIC variables or undocumented ROM entry points.
 ; The executable is loaded by CLOADM at $5000 and entered with EXEC.
 
@@ -37,6 +38,10 @@ TIMER_SAMPLES   EQU     $003C       ; 60 predicted fields
 TIMER_EVENTS    EQU     $00E0
 TIMER_RESULT    EQU     $00E1
 TIMER_MARKER    EQU     $00E2
+TIMER_MODE      EQU     $00E3       ; 0=diagnostic, 1=game loop
+GAME_PENDING    EQU     $00E4       ; queued frame updates
+GAME_FRAME_LO   EQU     $00E5
+GAME_FRAME_HI   EQU     $00E6
 
         *       = $5000
 
@@ -271,10 +276,49 @@ all_banks_ok = *
         LDAA    #$4B
         STAA    13,X
 
-        ; Run the timer/field-cadence diagnostic before entering the idle loop.
+        ; The game-loop scaffold displays a free-running four-digit frame
+        ; counter. game_update replaces this with simulation and rendering.
+        LDX     #SCREEN+160
+        LDAA    #$46                    ; F
+        STAA    0,X
+        LDAA    #$52                    ; R
+        STAA    1,X
+        LDAA    #$41                    ; A
+        STAA    2,X
+        LDAA    #$4D                    ; M
+        STAA    3,X
+        LDAA    #$45                    ; E
+        STAA    4,X
+        LDAA    #$3A                    ; :
+        STAA    5,X
+        LDAA    #$20                    ; space
+        STAA    6,X
+        LDAA    #$30                    ; 0
+        STAA    7,X
+        STAA    8,X
+        STAA    9,X
+        STAA    10,X
+
+        ; Run the timer/field-cadence diagnostic before entering the game loop.
         JSR     timer_compare_test
 
+        ; Only start the game loop after the cadence diagnostic succeeds.
+        LDAA    TIMER_RESULT
+        CMPA    #$01
+        BNE     main_loop
+        JSR     game_loop_start
+
 main_loop = *
+        ; The OCF ISR queues one tick per predicted field. Keep the main loop
+        ; responsible for game work so the interrupt remains short and phase
+        ; stable. Pending ticks are retained if an update takes longer than a
+        ; field.
+        LDAA    GAME_PENDING
+        BEQ     main_loop
+        SEI
+        DEC     GAME_PENDING
+        CLI
+        JSR     game_update
         BRA     main_loop
 
 mcx_failure = *
@@ -386,7 +430,8 @@ timer_compare_test = *
         JSR     write_timer_status
 
         ; Install a RAM jump at the stock OCF vector. The ROM normally puts an
-        ; RTI at $4206, so this changes only the diagnostic's private vector.
+        ; RTI at $4206, so this claims the private vector for the diagnostic
+        ; and the timer-driven game loop.
         LDAA    #$7E                    ; JMP extended
         STAA    TIMER_OCF_VECTOR
         LDX     #timer_compare_isr
@@ -396,6 +441,7 @@ timer_compare_test = *
         STAA    TIMER_EVENTS
         STAA    TIMER_RESULT
         STAA    TIMER_MARKER
+        STAA    TIMER_MODE
 
         ; Keep P2.1 as a keyboard input. Only P2.0 is driven by this test.
         LDAA    #$01
@@ -467,14 +513,81 @@ timer_compare_isr = *
         STAA    TIMER_MARKER
         STAA    TIMER_PORT2
 
+        LDAA    TIMER_MODE
+        BNE     timer_game_tick
         INC     TIMER_EVENTS
         LDAA    TIMER_EVENTS
         CMPA    #TIMER_SAMPLES
         BNE     timer_isr_done
         LDAA    #$01
         STAA    TIMER_RESULT
+        BRA     timer_isr_done
+timer_game_tick = *
+        INC     GAME_PENDING
 timer_isr_done = *
         RTI
+
+; Re-arm the same compare interval after the one-second diagnostic and enter
+; the frame-driven scaffold. The next compare is based on the current counter;
+; subsequent compares are chained from the previous compare in the ISR.
+game_loop_start = *
+        CLRA
+        STAA    TIMER_MODE
+        STAA    GAME_PENDING
+        STAA    GAME_FRAME_LO
+        STAA    GAME_FRAME_HI
+        LDAA    TIMER_CSR
+        LDD     TIMER_COUNTER
+        ADDD    #TIMER_PERIOD
+        STD     TIMER_COMPARE
+        LDAA    #$01
+        STAA    TIMER_MODE
+        LDAA    #$08
+        STAA    TIMER_CSR
+        CLI
+        RTS
+
+; One game update is deliberately minimal at this stage. It consumes one
+; queued timer event, increments a 16-bit frame counter, and renders the low
+; 16 bits as four hexadecimal digits. Replace this body with input, simulation,
+; collision, and rendering work as the game is built.
+game_update = *
+        INC     GAME_FRAME_LO
+        BNE     game_frame_render
+        INC     GAME_FRAME_HI
+game_frame_render = *
+        LDAA    GAME_FRAME_HI
+        LSRA
+        LSRA
+        LSRA
+        LSRA
+        JSR     hex_ascii_nibble
+        STAA    SCREEN+167
+        LDAA    GAME_FRAME_HI
+        JSR     hex_ascii_nibble
+        STAA    SCREEN+168
+        LDAA    GAME_FRAME_LO
+        LSRA
+        LSRA
+        LSRA
+        LSRA
+        JSR     hex_ascii_nibble
+        STAA    SCREEN+169
+        LDAA    GAME_FRAME_LO
+        JSR     hex_ascii_nibble
+        STAA    SCREEN+170
+        RTS
+
+; Convert the low nibble of A to an MC-10 alpha-mode hexadecimal character.
+hex_ascii_nibble = *
+        ANDA    #$0F
+        ADDA    #$30
+        CMPA    #$3A
+        BCC     hex_ascii_alpha
+        RTS
+hex_ascii_alpha = *
+        ADDA    #$07
+        RTS
 
 ; Copy one fixed-width status string to row 4. The self-modified low byte is
 ; reset to $80 after each call so repeated status updates are deterministic.

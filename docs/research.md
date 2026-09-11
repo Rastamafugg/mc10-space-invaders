@@ -105,6 +105,7 @@ cycle-critical animation is committed.
 - Treat MCX-128 as a runtime memory provider, not as a cartridge ROM boot image. The emulator test attaches the `mcx128` profile with `-cart mcx128`, then loads the cassette using the stock MC-10 ROM.
 - Test all eight selectable 16 KiB windows with distinct signatures. P0 is tested from `$5000`; a copied routine at `$D000` tests P1 without remapping the active code window.
 - Use the [timer-compare cadence test](timer-compare-test.md) as the initial frame-pacing experiment: 14,934 E clocks per predicted field, 60 output compares, and a P2.0 marker for external FS capture.
+- After the cadence test passes, use the same MC6803 OCF schedule as the initial game-loop driver; keep the ISR short and queue frame work for the foreground loop.
 
 ## Emulator comparison
 
