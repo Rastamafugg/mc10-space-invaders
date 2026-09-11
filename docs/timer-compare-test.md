@@ -117,13 +117,18 @@ xroar -machine mc10 -cart mcx128 -run build/space-invaders.c10
 
 ### Base-machine RAM alternatives
 
-For XRoar without MCX-128, use `-ram 8` for an 8 KiB model. Use `-ram 20` to
-model the usual 4 KiB onboard RAM plus a 16 KiB external RAM pack. XRoar also
-accepts `-ram 16` as 16 KiB total, but that is a different organization.
+The internal MC6847 RAM and external CPU expansion are separate hardware
+cases. Use XRoar `-ram 8` when approximating the published 8 KiB internal RAM
+modification. Use `-ram 20` when testing the stock 4 KiB internal RAM plus a
+16 KiB external pack; this does not make that external RAM part of the stock
+MC6847 video bus. XRoar `-ram 16` means 4 KiB internal plus 12 KiB external,
+not 16 KiB internal.
 
-Current MAME exposes the MC-10 choices `-ramsize 4K`, `-ramsize 8K`,
-`-ramsize 20K`, and `-ramsize 32K`. Use `-ramsize 20K` for the 4 KiB plus 16 KiB
-configuration. MCX-128 remains a separate cartridge configuration.
+Current MAME exposes `-ramsize 4K`, `8K`, `20K`, and `32K`. Its MC-10 driver
+installs one flat RAM device at `$4000` and supplies that device to the MC6847,
+so `8K` is a useful emulator approximation of an 8 KiB internal mod, while
+the larger settings should not be read as physical internal/external bus
+models. MCX-128 remains a separate cartridge configuration.
 
 To use the MCX boot-ROM image in XRoar, set the optional path before launching:
 

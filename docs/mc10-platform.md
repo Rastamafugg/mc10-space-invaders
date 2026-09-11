@@ -9,6 +9,32 @@ This file is the platform baseline for the project. Addresses marked as implemen
 - Text display: 32 columns by 16 rows, screen memory `$4000-$41FF`.
 - The MC-10 video-mode write is exposed through the `$9000-$BFFF` I/O area. The smoke test uses `$BFFF` with `$20` to select alpha mode, matching the current XRoar implementation's D5-to-GNA mapping.
 
+## Internal video RAM versus expansion RAM
+
+The stock machine has two 2 KiB static RAM devices, for 4 KiB total. They are
+on the internal RAM bus shared by the MC6803 and MC6847. The MC6847 receives
+its display addresses through that bus; the RAM supplied through the MC-10
+expansion connector is a separate CPU address-space resource and is not
+automatically visible to the VDG. This is why a normal 4 KiB plus 16 KiB
+expansion can provide CPU workspace without enabling the MC6847's two higher
+resolution colour modes.
+
+Published 8 KiB internal modifications add the missing MC6847 address bit and
+another 4 KiB of RAM, commonly by replacing or piggybacking the original RAM
+and changing the address gating. This supplies the 6 KiB required by the
+`128x192x4` and `256x192x2` modes. The MC6847 has 13 display address lines, so
+its flat display address space is at most 8 KiB.
+
+No reliable schematic or validated build in the project currently documents a
+16 KiB internal MC6847-RAM implementation. A [2023 experimental internal
+upgrade project](https://www.youtube.com/watch?v=usIhqL-vmS4) reports a
+checkpoint intended to make 16 KiB available to both the MC6803 and MC6847, but
+it is not yet a hardware reference for this project. Because the MC6847 has
+only 13 display address lines, such a design cannot be a flat 16 KiB VDG
+address space; it must add bank selection, address multiplexing, or equivalent
+glue logic. The documented 8 KiB modification and the MCX-128 expansion are
+therefore separate, confirmed hardware cases.
+
 ## Keyboard scanning
 
 The keyboard is an active-low matrix. Port 1 supplies eight column/strobe
@@ -124,8 +150,9 @@ The physical register map is documented separately in
   differently; the software contract is the P0/P1 window behavior.
 - `$BF01` bits 0-1 (`M0`/`M1`) select 16K external ROM, 8K RAM plus external
   ROM, 8K RAM plus internal ROM, or 16K RAM.
-- `$BF80-$BFFF` remains the base keyboard/VDG/sound I/O region, and the VDG
-  reads video RAM from built-in bank 0 regardless of `P1`.
+- `$BF80-$BFFF` remains the base keyboard/VDG/sound I/O region. On the physical
+  stock machine, the VDG reads the internal RAM bus; changing an MCX CPU-bank
+  selector does not by itself make external expansion RAM VDG-visible.
 
 The smoke test selects all-RAM mode and verifies distinct signatures through
 the four P0/P1 window pairs, covering all eight selectable 16K RAM banks. The
@@ -134,7 +161,10 @@ itself is loaded at `$5000` inside the Page 1 window. XRoar models eight 16K
 RAM banks and the same P0/P1/map-mode logic, but reports MC-10 support as
 unfinished and unsupported. Physical MCX-128 boot also requires an EPROM; the
 emulator cassette test uses the stock MC-10 ROM alongside the emulated RAM
-expansion.
+expansion. In current XRoar, the MC-10 VDG callback reads `RAM0`, while the
+MCX external memory is `RAM1`; therefore `-ram 8` is an emulator approximation
+of the internal 8 KiB modification, whereas `-ram 20` is the stock 4 KiB
+internal plus 16 KiB external arrangement.
 
 ## Cassette loading
 

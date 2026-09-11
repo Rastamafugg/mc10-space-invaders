@@ -42,11 +42,18 @@ physical expansion boots in external-ROM mode and requires a suitable EPROM;
 the XRoar cassette test uses the stock MC-10 ROM plus the emulated MCX-128 RAM
 unless `MC10_MCX_ROM` is supplied.
 
-For base-machine memory experiments, XRoar accepts `-ram 8`, `-ram 16`, and
-`-ram 20`. Use `-ram 20` when modeling the common 4 KiB onboard RAM plus a 16
-KiB external pack. MAME's corresponding current options are `-ramsize 8K` and
-`-ramsize 20K`; attach `mcx128` separately when testing the banked 128 KiB
-expansion.
+Do not treat the generic RAM-size options as interchangeable physical upgrades.
+The stock MC-10 has 4 KiB of internal RAM on the shared CPU/MC6847 bus. The
+external expansion bus adds CPU-visible RAM, but does not automatically add
+address space to the stock MC6847 video bus. XRoar models `-ram 8` as 8 KiB of
+internal RAM and its VDG fetch path reads that RAM, making it the closest
+emulator profile for the published 8 KiB internal modification. XRoar's
+`-ram 16` and `-ram 20` retain 4 KiB internal RAM and add external RAM; `-ram
+20` is the usual 4 KiB plus 16 KiB expansion configuration. MAME's `-ramsize`
+choices are documented separately in [the platform research](docs/research.md)
+because its current MC-10 driver presents one flat RAM device to the CPU and
+MC6847 rather than modeling the physical bus split. The MCX-128 remains a
+separate banked expansion.
 
 MC-10 cassette emulation starts paused because the real machine has no remote motor-control line. XRoar's `-run` path attaches the cassette and types `CLOADM`; open cassette controls with `Ctrl+T`, press `Play`, then type `EXEC` after the load completes. The MCX-128 is only the RAM expansion in this setup. See [the exact cassette sequence](docs/timer-compare-test.md#exact-xroar-cassette-sequence) for the `-load-tape` manual path.
 

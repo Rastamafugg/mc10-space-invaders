@@ -19,6 +19,10 @@
 - [XRoar `mc10.c`](https://github.com/stahta01/xroar/blob/master/src/mc10.c) is the base-machine implementation. It confirms the MC6803/MC6847 model and explicitly labels MC-10 support unfinished and unsupported.
 - [MC-10 ROM disassembly](https://github.com/RevCurtisP/MC10/blob/master/disasm/MC10%20Disassembly.txt) provides additional 6803 source evidence for internal ports, keyboard/VDG reads, and cassette routines. It predates MCX-128 and contains no MCX register definitions.
 - [MC10.js](https://github.com/mtinnes/mc-10/blob/master/MC10/MC10.js) is an independent emulator source confirming the base `$4000-$41FF` video area, `$9000-$BFFF` keyboard/VDG region, and MC6803 internal register assumptions. It does not implement the physical MCX-128 map.
+- [Zippster Zone: MC-10 8K internal mod](https://thezippsterzone.com/2020/06/12/mc-10-8k-internal-mod/) documents why expansion-port RAM is not VDG-visible and describes the additional internal address gating used for an 8 KiB video-RAM modification.
+- [Waveguide: Expanding the TRS-80 MC-10 internal RAM](https://www.waveguide.se/?article=expanding-the-trs-80-mc-10-internal-ram) cross-checks the isolated internal RAM bus, the unused MC6847 address line, and an 8 KiB SRAM replacement approach.
+- [PCBWay: MC-10 internal 8 KiB RAM upgrade](https://www.pcbway.com/project/shareproject/Matra_Alice_Tandy_TRS-80_MC-10_Internal_8KB_RAM_Upgrade_c78d2f81.html) identifies the two higher-resolution modes as requiring 6 KiB of video memory and distinguishes the internal upgrade from 4 KiB plus 16 KiB external expansion.
+- [Brendan Donahe's experimental internal upgrade video](https://www.youtube.com/watch?v=usIhqL-vmS4) reports a work-in-progress 32 KiB motherboard modification with a checkpoint intended to allow both the MC6803 and MC6847 to access 16 KiB. It is a research lead, not a validated schematic or physical reference.
 - [CRASM](https://github.com/colinbourassa/crasm) is the current assembler choice because it supports 6800/6801/6803 directly. [TASM6801](https://github.com/gregdionne/tasm6801) remains a possible alternative and already has MC-10 `.c10` output support.
 
 ## Register-map reconciliation
@@ -75,21 +79,41 @@ menu and the resulting MicroColor BASIC screen through an X11 pixel capture.
 No `TIMER: OK` capture has been accepted yet because the remaining failure is
 the cassette-load/execute path, not WSLg display rendering.
 
-## Base MC-10 RAM sizes
+## Internal MC6847 RAM and CPU expansion RAM
 
-XRoar's MC-10 profile accepts the generic `-ram` option. Its current source
-models `-ram 8` as 8 KiB of internal RAM and uses `-ram 20` for the authentic
-4 KiB onboard RAM plus a 16 KiB external RAM pack. `-ram 16` is also accepted
-as a 16 KiB total configuration, but it is not the same organization as the
-usual 16 KiB expansion added to a 4 KiB machine. The MCX-128 cartridge is a
-separate configuration and provides eight 16 KiB banks, not one larger linear
-base-RAM setting.
+The memory-size discussion must separate two buses. The service manual
+describes two 2 KiB static RAM devices, 4 KiB total, shared by the MC6803 and
+MC6847. The expansion connector can add CPU-addressable RAM in the `$4000`
+segment, but the stock wiring isolates that RAM from the MC6847. The MC6847
+has 13 display address lines, so it can address at most 8 KiB of flat display
+RAM. The published 8 KiB internal modifications use the otherwise unavailable
+high address line and provide enough memory for the `128x192x4` and
+`256x192x2` modes, which each require 6 KiB.
 
-MAME's current MC-10 machine configuration exposes `4K` by default and
-`8K`, `20K`, and `32K` as extra `-ramsize` choices. Therefore `-ramsize 20K`
-is the MAME equivalent of the standard 4 KiB plus 16 KiB expansion. The MAME
-binary installed in the WSL environment is older and does not expose the
-MCX-128 cartridge, even though current MAME source contains an MCX-128 device.
+The project currently has no reliable schematic or validated build that
+documents a full 16 KiB internal MC6847-RAM implementation. An experimental
+upgrade video reports a design intended to make 16 KiB available to both the
+MC6803 and MC6847, so the possibility should remain open. However, the MC6847
+address bus is only 13 bits; a 16 KiB design cannot be a flat VDG address space
+and would require additional bank selection, address multiplexing, or similar
+glue logic. Treat the experimental design as unverified until its schematic
+and address-selection behavior are available.
+
+The emulator options have different fidelity:
+
+| Configuration | XRoar current source | MAME current source | Physical interpretation |
+| --- | --- | --- | --- |
+| Stock | `-ram 4` | `-ramsize 4K` | 4 KiB internal CPU/VDG RAM |
+| Internal video-RAM mod | `-ram 8`; four 2 KiB `RAM0` banks are used by the VDG callback | `-ramsize 8K`; one flat 8 KiB RAM device is installed at `$4000` and read by the VDG callback | Emulator approximation of the published 8 KiB internal mod |
+| 4 KiB plus 16 KiB expansion | `-ram 20`; 4 KiB `RAM0` plus 16 KiB `RAM1` | `-ramsize 20K`; current driver exposes one flat 20 KiB device | CPU expansion; stock physical VDG bus remains 4 KiB |
+| MCX-128 | `-cart mcx128`; banked external RAM | Current source has an MCX-128 expansion device, but the installed MAME binary is older | Separate banked expansion; not an internal-RAM upgrade |
+
+In current XRoar, `-ram 16` means 4 KiB internal plus 12 KiB external, not
+16 KiB internal. In current MAME, the single flat RAM device makes its larger
+options useful for emulator testing but not a faithful model of the physical
+internal/external bus separation. The MCX-128 does not remove the need to
+model or build the internal 8 KiB modification when higher MC6847 modes are
+the target.
 
 ## Keyboard scan and frame timing
 

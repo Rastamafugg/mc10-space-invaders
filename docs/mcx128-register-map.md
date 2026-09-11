@@ -80,9 +80,11 @@ There are important exceptions:
 - `$0080-$00FF` uses MC6803 on-chip RAM by default. `$0014` can select expansion
   RAM for that range; when on-chip RAM is enabled, writes can mirror to the
   expansion RAM.
-- The VDG always reads video memory from the built-in video RAM in bank 0,
-  regardless of `P1`. A CPU write to `$4000-$41FF` while `P1=1` therefore does
-  not update the displayed screen.
+- The stock MC-10 VDG reads video memory from the internal RAM bus, not from
+  the MCX expansion bus. A CPU write to `$4000-$41FF` while an MCX page is
+  selected can therefore target expansion RAM without updating the displayed
+  screen. An 8 KiB internal-RAM modification is a separate motherboard change;
+  it is not created by selecting an MCX page.
 - In 16 KiB all-RAM mode, `$FF00-$FFFF` is fixed to bank 0. The corresponding
   256 bytes of bank 1 are inaccessible through that range.
 
