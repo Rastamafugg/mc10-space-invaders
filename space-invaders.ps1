@@ -19,9 +19,8 @@ if ($Mode -eq 'run') {
     }
     $emulator = if ($env:MC10_XROAR) { $env:MC10_XROAR } else { '/usr/local/bin/xroar' }
     $cassette = "$linuxRoot/build/space-invaders.c10"
-    $emulatorArgs = @('-machine', 'mc10', '-cart', 'mcx128')
-
     if ($env:MC10_MCX_ROM) {
+        $emulatorArgs = @('-machine', 'mc10', '-cart', 'mcx128')
         $mcxRom = $env:MC10_MCX_ROM
         if ($mcxRom -match '^[A-Za-z]:[\\/]') {
             $mcxRom = (& wsl.exe --exec wslpath -a -u $mcxRom).Trim()
@@ -31,7 +30,10 @@ if ($Mode -eq 'run') {
         }
         $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette)
     } else {
-        $emulatorArgs += @('-run', $cassette)
+        # An MCX-128 cartridge without its EPROM maps an empty ROM at reset.
+        # Use the stock machine as a loader control instead of showing a bad
+        # reverse-@ screen. The MCX test requires MC10_MCX_ROM.
+        $emulatorArgs = @('-machine', 'mc10', '-run', $cassette)
     }
 
     & wsl.exe --cd $linuxRoot --exec $emulator @emulatorArgs

@@ -31,16 +31,21 @@ The build emits:
 - `build/space-invaders.c10` — MC-10 cassette image with name, data, checksum, leader, and CUE gap records.
 - `build/space-invaders.lst` and `build/space-invaders.map` — assembler diagnostics.
 
-The launcher runs the equivalent XRoar command:
+Without an MCX EPROM path, the launcher runs a stock-machine cassette control
+using the equivalent XRoar command:
 
 ```text
-xroar -machine mc10 -cart mcx128 -run build/space-invaders.c10
+xroar -machine mc10 -run build/space-invaders.c10
 ```
 
-`-cart mcx128` selects and attaches the built-in MCX-128 cartridge profile. The
-physical expansion boots in external-ROM mode and requires a suitable EPROM;
-the XRoar cassette test uses the stock MC-10 ROM plus the emulated MCX-128 RAM
-unless `MC10_MCX_ROM` is supplied.
+`-cart mcx128` selects and attaches the built-in MCX-128 cartridge profile. An
+MCX-128 cartridge without `-cart-rom` starts with an unpopulated external ROM
+slot; under XRoar this produces the reverse-`@` screen rather than a usable
+boot. The launcher therefore omits the cartridge unless `MC10_MCX_ROM` is
+supplied. The stock-machine run is a cassette/CPU control test and is expected
+to report `MCX128 ERROR` because no MCX bank hardware is attached. It now
+continues to the independent timer diagnostic, so `TIMER: OK` in this mode
+validates cassette execution and timer cadence only, not MCX banking.
 
 Do not treat the generic RAM-size options as interchangeable physical upgrades.
 The stock MC-10 has 4 KiB of internal RAM on the shared CPU/MC6847 bus. The
@@ -55,13 +60,21 @@ because its current MC-10 driver presents one flat RAM device to the CPU and
 MC6847 rather than modeling the physical bus split. The MCX-128 remains a
 separate banked expansion.
 
-MC-10 cassette emulation starts paused because the real machine has no remote motor-control line. XRoar's `-run` path attaches the cassette and types `CLOADM`; open cassette controls with `Ctrl+T`, press `Play`, then type `EXEC` after the load completes. The MCX-128 is only the RAM expansion in this setup. See [the exact cassette sequence](docs/timer-compare-test.md#exact-xroar-cassette-sequence) for the `-load-tape` manual path.
+With `-load-tape`, MC-10 cassette emulation starts paused because the real
+machine has no remote motor-control line. XRoar's `-run` path queues `CLOADM`
+and uses its MC-10 ROM hook to activate Play automatically; the command may no
+longer be visible once submitted. The MCX-128 is only the RAM expansion in the
+full MCX setup. See [the exact cassette sequence](docs/timer-compare-test.md#exact-xroar-cassette-sequence) for the manual path.
 
 When `MC10_MCX_ROM` is set, the launcher uses `-load-tape` instead of `-run`.
 The MCX EPROM presents its boot menu before BASIC is available, so select
-`[0] MICROCOLOR BASIC` first. Then enter `CLOADM`, start the cassette manually,
+`[2] MCX BASIC (LARGE)` first. Then enter `CLOADM`, start the cassette manually,
 and enter `EXEC` after the load completes. The complete sequence is documented
 in [the timer-compare procedure](docs/timer-compare-test.md#mcx-128-boot-selection).
+
+The installed WSLg XRoar build renders the MCX boot menu, but the large-mode
+selection currently returns to that menu after its blank memory-test interval.
+It has not reached an MCX BASIC prompt in this configuration.
 
 Use `.\space-invaders.ps1 check` to validate tool and source prerequisites without launching the emulator. Use `.\space-invaders.ps1 clean` to remove generated artifacts.
 

@@ -354,6 +354,15 @@ mcx_failure = *
         STAA    12,X
         LDAA    #$21
         STAA    13,X
+
+        ; Keep the MCX failure visible, but continue with the timer diagnostic
+        ; so the stock-machine control can validate cassette execution and
+        ; timer cadence independently of MCX hardware.
+        JSR     timer_compare_test
+        LDAA    TIMER_RESULT
+        CMPA    #$01
+        BNE     main_loop
+        JSR     game_loop_start
         BRA     main_loop
 
 p1_test_start = *

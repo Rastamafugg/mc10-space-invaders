@@ -49,9 +49,9 @@ startup with these choices:
 
 | Key | Selection | Project relevance |
 | --- | --- | --- |
-| `0` | Stock MicroColor Basic | Use this for the current machine-language cassette test |
+| `0` | Stock MicroColor Basic | Compatibility option; not the selected project configuration |
 | `1` | MCX Basic, standard configuration | Uses the expanded BASIC workspace and five graphics pages |
-| `2` | MCX Basic, large configuration | Uses a separate BASIC workspace bank and eight graphics pages |
+| `2` | MCX Basic, large configuration | Selected project configuration; uses a separate BASIC workspace bank and eight graphics pages |
 
 The selected option runs a memory test and copies the selected ROM contents
 into RAM. The reference documents only a keyboard selection at startup and the
@@ -74,10 +74,15 @@ autorun behavior, while `-type` injects text into BASIC after ROM startup. The
 current XRoar options therefore do not select an MCX boot-menu entry. The
 project launcher accepts `MC10_MCX_ROM`; when set, it passes `-cart-rom` and
 uses `-load-tape` so that the menu can be answered manually.
-The installed WSLg XRoar display has been verified to render both the MCX boot
-menu and the resulting MicroColor BASIC screen through an X11 pixel capture.
-No `TIMER: OK` capture has been accepted yet because the remaining failure is
-the cassette-load/execute path, not WSLg display rendering.
+The installed WSLg XRoar display has been verified to render the stock BASIC
+prompt and the MCX boot menu through an X11 pixel capture. With the supplied
+MCX ROM, selecting `[2] MCX BASIC (LARGE)` currently blanks the display during
+the memory test and returns to the boot menu, so no MCX BASIC prompt or
+full-MCX `TIMER: OK` capture has been accepted yet. The stock no-cartridge
+control now produces `MCX128 ERROR`, `TIMER: OK`, and an advancing frame counter,
+which verifies cassette execution, timer cadence, and WSLg capture separately.
+The reverse-`@` screen is the separate failure mode caused by attaching the MCX
+profile without an EPROM image.
 
 ## Internal MC6847 RAM and CPU expansion RAM
 
@@ -181,8 +186,8 @@ cycle-critical animation is committed.
 - Use direct MC6803 assembly and a raw binary as the canonical build artifact.
 - Use an offline Python converter for the MC-10 cassette container so the program can be assembled by CRASM and loaded by XRoar.
 - Target `$5000` for the first executable. This leaves the screen and the documented BASIC workspace below it untouched.
-- Treat MCX-128 as a runtime memory provider, not as a cartridge ROM boot image. The emulator test attaches the `mcx128` profile with `-cart mcx128`, then loads the cassette using the stock MC-10 ROM.
-- When testing with the MCX EPROM image, select stock MicroColor Basic with key `0` and use `-load-tape`; do not rely on `-run` to cross the MCX boot menu.
+- Treat MCX-128 as a runtime memory provider, not as a cartridge ROM boot image. The stock-machine launcher is the cassette/CPU control; the full emulator test attaches the `mcx128` profile with `-cart mcx128`, supplies its EPROM with `-cart-rom`, and then loads the cassette.
+- When testing with the MCX EPROM image, select MCX Basic (Large) with key `2` and use `-load-tape`; do not rely on `-run` to cross the MCX boot menu.
 - Test all eight selectable 16 KiB windows with distinct signatures. P0 is tested from `$5000`; a copied routine at `$D000` tests P1 without remapping the active code window.
 - Use the [timer-compare cadence test](timer-compare-test.md) as the initial frame-pacing experiment: 14,934 E clocks per predicted field, 60 output compares, and a P2.0 marker for external FS capture.
 - After the cadence test passes, use the same MC6803 OCF schedule as the initial game-loop driver; keep the ISR short and queue frame work for the foreground loop.

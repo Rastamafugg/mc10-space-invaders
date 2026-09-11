@@ -61,10 +61,10 @@ the insertion point for input, simulation, collision, and rendering code.
 
 ### Exact XRoar cassette sequence
 
-The MCX-128 is a RAM expansion. It does not load or execute cassette data. In
-the project configuration, XRoar boots the stock MC-10 ROM and attaches the
-MCX-128 RAM profile, so the MC-10 cassette commands remain part of the load
-sequence.
+The MCX-128 is a RAM expansion. It does not load or execute cassette data. The
+stock-machine launcher is used as the cassette/CPU control. The full project
+configuration attaches the MCX-128 profile with its EPROM image, selects MCX
+BASIC (Large), and then uses the MC-10 cassette commands for the load sequence.
 
 ### MCX-128 boot selection
 
@@ -72,8 +72,8 @@ The supplied [MCX Basic Reference](MCX%20Documentation/MCX%20Basic%20Reference.p
 states that an MCX Basic EPROM presents a boot menu at startup. The menu offers
 stock MicroColor Basic, standard MCX Basic, and large MCX Basic. Pressing the
 selected menu key starts a memory test and copies the selected ROM contents into
-RAM. For this project, select `[0] MICROCOLOR BASIC`: the program is a machine-
-language test that expects the stock MC-10 screen and workspace arrangement.
+RAM. For this project, select `[2] MCX BASIC (LARGE)`, the required MCX BASIC
+configuration for the target setup.
 
 The supplied [MCX128 Hardware Info](MCX%20Documentation/MCX128%20Hardware%20Info.pdf)
 documents software control for the RAM-bank and ROM-map registers, but does not
@@ -92,7 +92,7 @@ xroar -machine mc10 -cart mcx128 \
   -load-tape build/space-invaders.c10
 ```
 
-Select option `0`, wait for the MicroColor BASIC `OK` prompt, and continue with
+Select option `2`, wait for the MCX BASIC `OK` prompt, and continue with
 the cassette sequence below.
 
 XRoar can technically accept an emulator-only replacement with `-cart-rom` if
@@ -112,8 +112,18 @@ From PowerShell, use the project launcher:
 The launcher runs:
 
 ```text
-xroar -machine mc10 -cart mcx128 -run build/space-invaders.c10
+xroar -machine mc10 -run build/space-invaders.c10
 ```
+
+This no-cartridge invocation is a loader control only. It reaches the program
+and displays `MCX128 ERROR` because the MCX bank registers are not present. It
+then continues to the independent timer diagnostic; `TIMER: OK` in this mode
+validates cassette execution and timer cadence, not MCX banking. The full MCX
+path requires `MC10_MCX_ROM` and uses the `-load-tape` command shown above.
+
+The WSLg X11 capture produced `MCX128 ERROR`, `TIMER: OK`, and an advancing
+frame counter on the same screen. This is the accepted cassette/timer control
+result; it is not an MCX-128 bank-test result.
 
 ### Base-machine RAM alternatives
 
@@ -138,14 +148,20 @@ $env:MC10_MCX_ROM = 'E:\path\to\mcx128.rom'
 ```
 
 With that variable set, the launcher passes `-cart-rom` and `-load-tape`, then
-waits for the manual boot-menu selection described above.
+waits for the manual `[2] MCX BASIC (LARGE)` boot-menu selection described
+above. In the current WSLg XRoar build, the menu renders but selection `[2]`
+returns to the menu instead of producing a BASIC prompt, so the full MCX
+cassette test remains blocked at firmware startup.
 
-XRoar's `-run` option attaches the `.c10` image and types `CLOADM` for a
-machine-code image. The MC-10 has no remote cassette motor-control line, so
-the tape starts paused. Complete the load as follows:
+XRoar's `-run` option attaches the `.c10` image and queues `CLOADM` for a
+machine-code image. On the MC-10, XRoar also uses a ROM hook to activate Play
+when the cassette loader reaches the appropriate routine. The queued command
+is submitted through XRoar's automatic keyboard and may not remain visible;
+seeing only the `OK` prompt and its cursor after submission is not proof that
+the command was skipped. The `-load-tape` path starts paused and requires the
+manual sequence below:
 
-1. Focus the emulated MC-10 display and wait for the `CLOADM` command to
-   appear, then press `Enter` if XRoar has not already done so.
+1. Focus the emulated MC-10 display, type `CLOADM`, and press `Enter`.
 2. Press `Ctrl+T` to open XRoar's cassette-controls window.
 3. Select the `Input` tab, verify that `SPACEINV` is the selected tape, and
    press `Play` once. `Pause` becomes enabled while the tape is running.
