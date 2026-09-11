@@ -12,7 +12,10 @@ SCREEN          EQU     $4000
 VIDEO_MODE      EQU     $BFFF
 MCX_BANK        EQU     $BF00
 MCX_MAP         EQU     $BF01
-MCX_TEST        EQU     $8000
+MCX_TEST        EQU     $C000
+MCX_BANK_P0     EQU     $01
+MCX_BANK_P1     EQU     $02
+MCX_MAP_ALL_RAM EQU     $03
 
         *       = $5000
 
@@ -40,17 +43,18 @@ clear_second_half = *
         INCB
         BNE     clear_second_half
 
-        ; Confirm that the MCX-128 cartridge responds at its registers and
-        ; that its all-RAM mapping exposes the test byte at $8000.
-        LDAA    #$01
+        ; Confirm that the MCX-128 responds at its registers and that P0
+        ; selects the alternate page-0 RAM at $C000. Code remains at $5000,
+        ; which is page 1 with P1=0.
+        LDAA    #MCX_BANK_P0
         STAA    MCX_BANK
         LDAA    MCX_BANK
-        CMPA    #$01
+        CMPA    #MCX_BANK_P0
         BEQ     bank_check_ok
         JMP     mcx_failure
 bank_check_ok = *
 
-        LDAA    #$03
+        LDAA    #MCX_MAP_ALL_RAM
         STAA    MCX_MAP
         LDAA    #$A5
         STAA    MCX_TEST

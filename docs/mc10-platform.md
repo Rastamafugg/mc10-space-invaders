@@ -1,6 +1,6 @@
 # MC-10 platform baseline
 
-This file is the platform baseline for the project. Addresses marked as implementation facts are taken from the current XRoar MC-10/MCX128 implementation or the MC-10 service-manual memory map. Addresses marked as working assumptions require confirmation against a physical machine.
+This file is the platform baseline for the project. Addresses marked as implementation facts are taken from the MCX128 Hardware Info document, the current XRoar MC-10/MCX128 implementation, or the MC-10 service-manual memory map. Addresses marked as working assumptions require confirmation against a physical machine.
 
 ## CPU and video
 
@@ -23,16 +23,25 @@ This file is the platform baseline for the project. Addresses marked as implemen
 
 The initial executable loads at `$5000` so it remains outside the screen, BASIC workspace, and stack regions identified by the reference map.
 
-## MCX-128 working map
+## MCX-128 physical map
 
-The XRoar MCX128 model identifies two cartridge registers:
+The physical register map is documented separately in
+[`docs/mcx128-register-map.md`](mcx128-register-map.md). The short form is:
 
-- `$BF00` — bank register. Bit 0 selects the low 16 KiB bank and bit 1 selects the upper/middle bank group.
-- `$BF01` — map-mode register. Values used by the XRoar model are 0 = all ROM, 1 = external ROM plus RAM, 2 = internal ROM plus RAM, and 3 = all RAM.
+- `$BF00` bit 0 (`P0`) selects the bank group for Page 0, `$0000-$3FFF` and
+  `$C000-$FFFF`.
+- `$BF00` bit 1 (`P1`) selects the bank group for Page 1, `$4000-$BFFF`.
+- `$BF01` bits 0-1 (`M0`/`M1`) select 16K external ROM, 8K RAM plus external
+  ROM, 8K RAM plus internal ROM, or 16K RAM.
+- `$BF80-$BFFF` remains the base keyboard/VDG/sound I/O region, and the VDG
+  reads video RAM from built-in bank 0 regardless of `P1`.
 
-The model keeps `$BF80-$BFFF` available to the base keyboard/VDG path. The smoke test writes `$03` to `$BF01`, writes `$A5` to `$8000`, verifies it, and restores map mode 0. The game runtime must not assume that this map is safe for code or data until the bank ownership plan is complete.
-
-The MCX-128 provides 128 KiB of banked RAM in eight 16 KiB banks. Its exact physical behavior, reset contents, and interaction with a real MC-10 expansion connector remain hardware-validation items.
+The smoke test sets `P0=1`, selects all-RAM mode, and verifies `$C000`. It does
+not set `P1`, because the executable itself is loaded at `$5000` inside the
+Page 1 window. XRoar models eight 16K RAM banks and the same P0/P1/map-mode
+logic, but reports MC-10 support as unfinished and unsupported. Physical MCX-128
+boot also requires an EPROM; the emulator cassette test uses the stock MC-10
+ROM alongside the emulated RAM expansion.
 
 ## Cassette loading
 
@@ -49,6 +58,7 @@ Each block has the `$55`, `$3C`, type, length, payload, checksum, `$55` framing 
 ## Unresolved platform questions
 
 - Confirm the alpha/semigraphics mode values on physical MC-10 hardware.
-- Confirm the MCX-128 bank-switch sequence and which expanded banks are visible during cassette loading.
+- Verify P1 switching and `$0014` direct-page selection on physical hardware.
+- Confirm the physical EPROM boot path and expanded-bank state during cassette loading.
 - Determine whether the final game should use direct screen RAM, ROM character output, or custom semigraphics glyphs.
 - Measure the usable frame budget at the MC6803 clock rate before committing to a game architecture.

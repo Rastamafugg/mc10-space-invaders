@@ -20,11 +20,10 @@ if ($Mode -eq 'run') {
     $emulator = if ($env:MC10_XROAR) { $env:MC10_XROAR } else { '/usr/local/bin/xroar' }
     & wsl.exe --cd $linuxRoot --exec $emulator `
         -machine mc10 `
-        -cart-type mcx128 `
+        -cart mcx128 `
         -run "$linuxRoot/build/space-invaders.c10"
     exit $LASTEXITCODE
 }
 
 & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" $Mode
 exit $LASTEXITCODE
-
