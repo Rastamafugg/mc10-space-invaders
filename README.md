@@ -88,8 +88,10 @@ $env:MC10_MCX_DIRECT_ROM = 'E:\projects\mc10-space-invaders\build\mcx128bas-larg
 
 The patch forces the firmware's internal selector value for `[2] MCX BASIC
 (LARGE)`, but retains the firmware memory test and ROM-copy initialization.
-`MC10_MCX_DIRECT_ROM` makes the launcher use XRoar's `-run` path, which queues
-`CLOADM:EXEC` after the direct ROM reaches the BASIC prompt. This image is for
+`MC10_MCX_DIRECT_ROM` makes the launcher use `-load-tape` and queue `CLOADM`.
+After the prompt, open XRoar cassette controls with `Ctrl+T`, press `Play`,
+wait for the tape to stop, and enter `EXEC`. XRoar's generic `-run` path queues
+`CLOADM:EXEC`, which MCX BASIC reports as a syntax error. This image is for
 emulation only and must not be programmed into a physical MCX EPROM.
 
 The installed WSLg XRoar build renders the MCX boot menu, but the large-mode

@@ -112,10 +112,11 @@ python3 scripts/patch_mcx128_rom.py \
 ```
 
 From PowerShell, set `MC10_MCX_DIRECT_ROM` to the generated Windows path and
-run `.\space-invaders.ps1 run`. The launcher then uses `-run` rather than
-`-load-tape`; XRoar queues `CLOADM:EXEC` and starts the cassette after the ROM
-reaches the MCX BASIC prompt. The direct ROM reaches that prompt without a
-menu key, which removes the startup race.
+run `.\space-invaders.ps1 run`. The launcher uses `-load-tape` and queues
+`CLOADM`. After the direct ROM reaches the MCX BASIC prompt, open cassette
+controls with `Ctrl+T`, press `Play`, wait for the tape to stop, and enter
+`EXEC`. XRoar's generic `-run` path queues `CLOADM:EXEC`, which MCX BASIC
+rejects, so it is not used for this direct path.
 
 From PowerShell, use the project launcher:
 
@@ -168,12 +169,12 @@ above. In the current WSLg XRoar build, the menu renders but selection `[2]`
 returns to the menu instead of producing a BASIC prompt, so the full MCX
 cassette test remains blocked at firmware startup.
 
-XRoar's `-run` option attaches the `.c10` image and queues `CLOADM` for a
-machine-code image. On the MC-10, XRoar also uses a ROM hook to activate Play
-when the cassette loader reaches the appropriate routine. The queued command
-is submitted through XRoar's automatic keyboard and may not remain visible;
-seeing only the `OK` prompt and its cursor after submission is not proof that
-the command was skipped. The `-load-tape` path starts paused and requires the
+For the stock-machine path, XRoar's `-run` option attaches the `.c10` image and
+queues `CLOADM` for a machine-code image. On the MC-10, XRoar also uses a ROM
+hook to activate Play when the cassette loader reaches the appropriate routine.
+The queued command is submitted through XRoar's automatic keyboard and may not
+remain visible; seeing only the `OK` prompt and its cursor after submission is
+not proof that the command was skipped. The `-load-tape` path starts paused and requires the
 manual sequence below:
 
 1. Focus the emulated MC-10 display, type `CLOADM`, and press `Enter`.

@@ -29,9 +29,10 @@ if ($Mode -eq 'run') {
             }
         }
         if ($env:MC10_MCX_DIRECT_ROM) {
-            # The direct-boot image reaches the MCX BASIC prompt without
-            # keyboard input, so XRoar can use its CLOADM:EXEC autorun path.
-            $emulatorArgs += @('-cart-rom', $mcxRom, '-run', $cassette)
+            # MCX BASIC does not accept XRoar's generic CLOADM:EXEC syntax.
+            # Queue CLOADM only; the cassette Play control and EXEC remain
+            # explicit so the direct path follows the MCX BASIC sequence.
+            $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette, '-type', 'CLOADM\r')
         } else {
             $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette)
         }

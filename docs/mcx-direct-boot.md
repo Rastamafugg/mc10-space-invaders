@@ -13,11 +13,12 @@ CPU address `$C08D` while the ROM is mapped at `$C000`.
 The replacement bytes are:
 
 ```text
-86 01 20 11 01 01 01 01 01 01 01 01 01 01 01 01
-01 01 01 01 01
+CC FE 10 97 02 86 01 20 0C 01 01 01 01 01 01 01 01
+01 01 01 01 01 01 01 01 01 01 01 01
 ```
 
-This is `LDAA #$01`, `BRA $C0A2`, followed by unused `NOP` bytes. The MCX
+This preserves the original `LDD #$FE10` and `STAA $02` Port 2 setup, then
+performs `LDAA #$01` and `BRA $C0A2`, followed by unused `NOP` bytes. The MCX
 firmware's internal values are not the printed menu numbers:
 
 | Menu item | Firmware selector value | Result |
@@ -29,7 +30,7 @@ firmware's internal values are not the printed menu numbers:
 The branch rejoins the original common path at `$C0A2`, so the firmware still
 performs its RAM test, copies the selected BASIC image to RAM, initializes the
 MCX registers, and enters the normal BASIC warm start. The patch bypasses only
-the keyboard polling loop.
+the keyboard polling loop while retaining the port setup that precedes it.
 
 ## Generate
 
@@ -55,10 +56,13 @@ $env:MC10_MCX_DIRECT_ROM = 'E:\projects\mc10-space-invaders\build\mcx128bas-larg
 .\space-invaders.ps1 run
 ```
 
-The launcher passes `-cart mcx128`, `-cart-rom`, and `-run`. XRoar's autorun
-logic queues the machine-code cassette command only after the direct ROM is at
-the BASIC prompt. The direct boot was captured under WSLg as
-`MCX BASIC 2.1`, `BUILT MAR 18, 2011`, and `OK`, without sending a menu key.
+The launcher passes `-cart mcx128`, `-cart-rom`, `-load-tape`, and a queued
+`CLOADM` command. After the direct ROM reaches the BASIC prompt, open XRoar's
+cassette controls with `Ctrl+T`, press `Play`, wait for the tape to stop, and
+enter `EXEC`. The direct boot and cassette transfer were captured under WSLg
+as `MCX BASIC 2.1`, `BUILT MAR 18, 2011`, and `OK`, without sending a menu key.
+XRoar's generic `-run` path is not used here because its `CLOADM:EXEC` command
+is rejected by MCX BASIC.
 
 The generated image is intentionally emulator-only. It must not be programmed
 into an EPROM or used as evidence that the physical MCX-128 boot path has been
