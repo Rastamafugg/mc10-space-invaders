@@ -104,17 +104,26 @@ ROM and attaches the MCX-128 as a RAM expansion.
 
 ## Assembly implications
 
-The current program is loaded at `$5000`. It can set `P0=1` and test `$C000`
-without remapping its own code because `$5000` is in Page 1 and `P1` remains
-zero. Setting `P1=1` in place would remap the code window to the alternate bank
-group; code must be relocated or a bank-safe trampoline must be used first.
+The current program is loaded at `$5000`. It can set `P0=1` and test the P0
+windows without remapping its own code because `$5000` is in Page 1 and `P1`
+remains zero. Setting `P1=1` in place would remap the code window to the
+alternate bank group; the test therefore copies a bank-safe routine to `$D000`
+before switching P1.
 
 The smoke test therefore uses this sequence:
 
-1. Write `P0=1`, `P1=0` to `$BF00`.
-2. Write all-RAM mode `11` to `$BF01`.
-3. Write and read a test byte at `$C000`, the P0-selected Page-0 window.
-4. Restore `$BF01=0` and `$BF00=0` before normal MC-10 ROM or video use.
+1. Write `P0=0`, `P1=0` to `$BF00` and all-RAM mode `11` to `$BF01`.
+2. Write signatures to the low and high P0 windows, select `P0=1`, and write
+   different signatures to those windows.
+3. Re-select `P0=0` and verify the first pair, then select `P0=1` and verify
+   the second pair.
+4. Copy a bank-safe P1 test routine to `$D000` while `P0=0`; that address is in
+   Page 0 and remains executable while P1 changes. `$C000` remains reserved
+   for the P0 signature.
+5. From `$D000`, write and verify signatures through the P1=0 and P1=1 middle
+   window pairs, covering the remaining four 16K banks.
+6. Return to `$5000`, then restore `$BF01=0` and `$BF00=0` before normal MC-10
+   ROM or video use.
 
 The P1 path, `$0014` direct-page selection, reset contents, and physical
 cassette-loader interaction remain hardware-validation items.

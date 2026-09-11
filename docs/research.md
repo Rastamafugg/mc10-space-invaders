@@ -32,7 +32,41 @@ disassembly and MC10.js as base-machine corroboration only.
 - Use an offline Python converter for the MC-10 cassette container so the program can be assembled by CRASM and loaded by XRoar.
 - Target `$5000` for the first executable. This leaves the screen and the documented BASIC workspace below it untouched.
 - Treat MCX-128 as a runtime memory provider, not as a cartridge ROM boot image. The emulator test attaches the `mcx128` profile with `-cart mcx128`, then loads the cassette using the stock MC-10 ROM.
-- Test P0 at `$C000`, not `$8000`, so the smoke test exercises the physical Page 0 selector without remapping code at `$5000`. P1 remains unset until code relocation or a bank-safe trampoline exists.
+- Test all eight selectable 16 KiB windows with distinct signatures. P0 is tested from `$5000`; a copied routine at `$D000` tests P1 without remapping the active code window.
+
+## Emulator comparison
+
+XRoar remains the default development runner because its current source has a
+dedicated MCX-128 implementation, its manual documents the built-in `mcx128`
+profile, and its `-run` path attaches `.c10` images and types `CLOADM`. The MC-10
+ROM then requires `EXEC` after the load completes. The source still labels
+MC-10 support unfinished and unsupported, so it is not sufficient as the only
+validation target.
+
+Current [MAME MC-10 source](https://github.com/mamedev/mame/blob/master/src/mame/trs/mc10.cpp)
+also exposes an `ext` expansion slot, and its dedicated
+[MCX-128 device](https://github.com/mamedev/mame/blob/master/src/devices/bus/mc10/mcx128.cpp)
+implements 128 KiB of RAM, 16 KiB of ROM, `$BF00`/`$BF01` control registers,
+and the four map modes. A recent build can be evaluated with the equivalent
+shape:
+
+```text
+mame mc10 -ext mcx128 -cass build/space-invaders.c10
+```
+
+The installed MAME binary is version 0.220 and does not expose the MCX-128
+slot; use a current MAME build for this comparison. MAME is the recommended
+independent cross-check, not a replacement for XRoar in the project launcher.
+
+Other options are less suitable for this assembly project. The
+[Virtual MC-10 MCX Basic notes](https://colorcomputerarchive.com/repo/MC-10/Bios/MCX%20Basic/Read%20Me.pdf)
+describe broad MCX Basic compatibility, but the emulator is an older
+Windows-oriented tool and is not a source-level hardware reference. The
+[MC-10 JavaScript emulator](https://github.com/mtinnes/mc-10) is useful for
+browser-based base-machine checks, but does not implement MCX-128 banking. The
+[MicroDS emulator](https://github.com/wavemotion-dave/MicroDS) has optional
+MCX-128 support, but its own notes describe the larger banked model as partial;
+it is a useful secondary check rather than the primary development target.
 
 ## Open research items
 

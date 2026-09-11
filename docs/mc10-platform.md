@@ -32,19 +32,23 @@ The physical register map is documented separately in
   `$0000-$3FFF` and `$C000-$FFFF`.
 - `$BF00` bit 1 (`P1`) selects between two 32K bank groups for Page 1,
   `$4000-$BFFF`.
-- The four visible 16K CPU windows map to eight physical 16K banks: P0 uses
-  banks 0/4 and 3/7, while P1 uses banks 1/5 and 2/6.
+- Under XRoar's internal bank-page numbering, the four visible 16K CPU
+  windows map to eight physical 16K banks: P0 uses banks 0/4 and 3/7, while
+  P1 uses banks 1/5 and 2/6. Other emulators may number the backing pages
+  differently; the software contract is the P0/P1 window behavior.
 - `$BF01` bits 0-1 (`M0`/`M1`) select 16K external ROM, 8K RAM plus external
   ROM, 8K RAM plus internal ROM, or 16K RAM.
 - `$BF80-$BFFF` remains the base keyboard/VDG/sound I/O region, and the VDG
   reads video RAM from built-in bank 0 regardless of `P1`.
 
-The smoke test sets `P0=1`, selects all-RAM mode, and verifies `$C000`. It does
-not set `P1`, because the executable itself is loaded at `$5000` inside the
-Page 1 window. XRoar models eight 16K RAM banks and the same P0/P1/map-mode
-logic, but reports MC-10 support as unfinished and unsupported. Physical MCX-128
-boot also requires an EPROM; the emulator cassette test uses the stock MC-10
-ROM alongside the emulated RAM expansion.
+The smoke test selects all-RAM mode and verifies distinct signatures through
+the four P0/P1 window pairs, covering all eight selectable 16K RAM banks. The
+P1 portion is copied to `$D000` before P1 is changed, because the executable
+itself is loaded at `$5000` inside the Page 1 window. XRoar models eight 16K
+RAM banks and the same P0/P1/map-mode logic, but reports MC-10 support as
+unfinished and unsupported. Physical MCX-128 boot also requires an EPROM; the
+emulator cassette test uses the stock MC-10 ROM alongside the emulated RAM
+expansion.
 
 ## Cassette loading
 
