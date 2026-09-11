@@ -18,10 +18,23 @@ if ($Mode -eq 'run') {
         exit $LASTEXITCODE
     }
     $emulator = if ($env:MC10_XROAR) { $env:MC10_XROAR } else { '/usr/local/bin/xroar' }
-    & wsl.exe --cd $linuxRoot --exec $emulator `
-        -machine mc10 `
-        -cart mcx128 `
-        -run "$linuxRoot/build/space-invaders.c10"
+    $cassette = "$linuxRoot/build/space-invaders.c10"
+    $emulatorArgs = @('-machine', 'mc10', '-cart', 'mcx128')
+
+    if ($env:MC10_MCX_ROM) {
+        $mcxRom = $env:MC10_MCX_ROM
+        if ($mcxRom -match '^[A-Za-z]:[\\/]') {
+            $mcxRom = (& wsl.exe --exec wslpath -a -u $mcxRom).Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $mcxRom) {
+                throw 'WSL could not resolve MC10_MCX_ROM.'
+            }
+        }
+        $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette)
+    } else {
+        $emulatorArgs += @('-run', $cassette)
+    }
+
+    & wsl.exe --cd $linuxRoot --exec $emulator @emulatorArgs
     exit $LASTEXITCODE
 }
 

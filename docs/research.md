@@ -13,6 +13,7 @@
 - [MC-10 service manual](https://cdn.hackaday.io/files/1837077859720288/Tandy_MC-10_Service_Manual.pdf) documents the hardware memory map, MC6803/MC6847 system, cassette block format, and the name-file fields used by `CLOADM`.
 - [MC-10 review and monitor reference](https://colorcomputerarchive.com/test/repo/MC-10/Documents/Articles/MC-10%20Review%20%28Hot%20CoCo%20Sep%2783%29.pdf) provides a software-oriented memory map and ROM entry-point table, including screen memory at `$4000-$41FF`.
 - [MCX-128 hardware documentation backup](https://hackaday.io/project/203205-mcx12825) provides the public download containing `MCX128 Hardware Info.pdf`. That document defines the physical `$BF00`/`$BF01` registers, page grouping, ROM modes, direct-page behavior, and EPROM boot requirement.
+- The repository's local [MCX documentation set](MCX%20Documentation/) contains the `MCX128 Hardware Info`, `MCX Basic Reference`, `MCX Filing Protocol`, and `Emcee Server Guide` documents supplied for this project.
 - [MCX Wares MCX128 overview](https://mcxwares.blogspot.com/2020/04/mcx128.html) independently identifies the expansion as a 128 KiB RAM and EPROM upgrade for the MC-10/Alice.
 - [XRoar `mcx128.c`](https://github.com/stahta01/xroar/blob/master/src/mcx128.c) is an additional MCX-aware source. It implements eight 16 KiB RAM banks, P0/P1 page selection, `$BF00`/`$BF01`, the four map modes, `$BF80-$BFFF` I/O priority, and the fixed `$FF00-$FFFF` exception in all-RAM mode.
 - [XRoar `mc10.c`](https://github.com/stahta01/xroar/blob/master/src/mc10.c) is the base-machine implementation. It confirms the MC6803/MC6847 model and explicitly labels MC-10 support unfinished and unsupported.
@@ -35,6 +36,60 @@
 The project now treats the hardware document and XRoar implementation as
 agreement on the register addresses and bit meanings, while treating the ROM
 disassembly and MC10.js as base-machine corroboration only.
+
+## MCX-128 boot selection
+
+The local `MCX Basic Reference` documents the boot behavior separately from the
+MCX memory registers. An MCX Basic EPROM presents a software boot menu at
+startup with these choices:
+
+| Key | Selection | Project relevance |
+| --- | --- | --- |
+| `0` | Stock MicroColor Basic | Use this for the current machine-language cassette test |
+| `1` | MCX Basic, standard configuration | Uses the expanded BASIC workspace and five graphics pages |
+| `2` | MCX Basic, large configuration | Uses a separate BASIC workspace bank and eight graphics pages |
+
+The selected option runs a memory test and copies the selected ROM contents
+into RAM. The reference documents only a keyboard selection at startup and the
+`BREAK` plus `Reset` sequence for returning to the menu. The local hardware
+document does not identify a boot DIP switch, persistent selector, or software
+setting that skips the menu. The boot menu is therefore an EPROM software
+sequence, not a `$BF00`/`$BF01` bank-register mode.
+
+XRoar can load a replacement 16 KiB MCX ROM with `-cart-rom`, so a direct-boot
+ROM is technically possible. It must preserve the MCX memory initialization and
+selected BASIC-copy path; changing only the displayed menu text is insufficient.
+The project does not currently generate or ship such a patched ROM because the
+internal startup paths still require validation against the physical module.
+An emulator-only patched ROM or a post-selection snapshot remains the correct
+future approach. It must not be treated as a physical EPROM image without
+separate hardware validation.
+
+XRoar's `-cart-autorun` applies to cartridges that implement their own
+autorun behavior, while `-type` injects text into BASIC after ROM startup. The
+current XRoar options therefore do not select an MCX boot-menu entry. The
+project launcher accepts `MC10_MCX_ROM`; when set, it passes `-cart-rom` and
+uses `-load-tape` so that the menu can be answered manually.
+The installed WSLg XRoar display has been verified to render both the MCX boot
+menu and the resulting MicroColor BASIC screen through an X11 pixel capture.
+No `TIMER: OK` capture has been accepted yet because the remaining failure is
+the cassette-load/execute path, not WSLg display rendering.
+
+## Base MC-10 RAM sizes
+
+XRoar's MC-10 profile accepts the generic `-ram` option. Its current source
+models `-ram 8` as 8 KiB of internal RAM and uses `-ram 20` for the authentic
+4 KiB onboard RAM plus a 16 KiB external RAM pack. `-ram 16` is also accepted
+as a 16 KiB total configuration, but it is not the same organization as the
+usual 16 KiB expansion added to a 4 KiB machine. The MCX-128 cartridge is a
+separate configuration and provides eight 16 KiB banks, not one larger linear
+base-RAM setting.
+
+MAME's current MC-10 machine configuration exposes `4K` by default and
+`8K`, `20K`, and `32K` as extra `-ramsize` choices. Therefore `-ramsize 20K`
+is the MAME equivalent of the standard 4 KiB plus 16 KiB expansion. The MAME
+binary installed in the WSL environment is older and does not expose the
+MCX-128 cartridge, even though current MAME source contains an MCX-128 device.
 
 ## Keyboard scan and frame timing
 
@@ -103,6 +158,7 @@ cycle-critical animation is committed.
 - Use an offline Python converter for the MC-10 cassette container so the program can be assembled by CRASM and loaded by XRoar.
 - Target `$5000` for the first executable. This leaves the screen and the documented BASIC workspace below it untouched.
 - Treat MCX-128 as a runtime memory provider, not as a cartridge ROM boot image. The emulator test attaches the `mcx128` profile with `-cart mcx128`, then loads the cassette using the stock MC-10 ROM.
+- When testing with the MCX EPROM image, select stock MicroColor Basic with key `0` and use `-load-tape`; do not rely on `-run` to cross the MCX boot menu.
 - Test all eight selectable 16 KiB windows with distinct signatures. P0 is tested from `$5000`; a copied routine at `$D000` tests P1 without remapping the active code window.
 - Use the [timer-compare cadence test](timer-compare-test.md) as the initial frame-pacing experiment: 14,934 E clocks per predicted field, 60 output compares, and a P2.0 marker for external FS capture.
 - After the cadence test passes, use the same MC6803 OCF schedule as the initial game-loop driver; keep the ISR short and queue frame work for the foreground loop.

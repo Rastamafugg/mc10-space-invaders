@@ -66,6 +66,42 @@ the project configuration, XRoar boots the stock MC-10 ROM and attaches the
 MCX-128 RAM profile, so the MC-10 cassette commands remain part of the load
 sequence.
 
+### MCX-128 boot selection
+
+The supplied [MCX Basic Reference](MCX%20Documentation/MCX%20Basic%20Reference.pdf)
+states that an MCX Basic EPROM presents a boot menu at startup. The menu offers
+stock MicroColor Basic, standard MCX Basic, and large MCX Basic. Pressing the
+selected menu key starts a memory test and copies the selected ROM contents into
+RAM. For this project, select `[0] MICROCOLOR BASIC`: the program is a machine-
+language test that expects the stock MC-10 screen and workspace arrangement.
+
+The supplied [MCX128 Hardware Info](MCX%20Documentation/MCX128%20Hardware%20Info.pdf)
+documents software control for the RAM-bank and ROM-map registers, but does not
+document a boot switch, persistent boot selection, or an alternate hardware boot
+mode. The documented way to show the menu again without power-cycling is to hold
+`BREAK` while pressing and releasing `Reset`.
+
+XRoar's `-run` feature automatically types the cassette load command. That is
+appropriate for the stock ROM path, but it is not reliable when an MCX EPROM is
+present because the boot menu must be answered first. Use `-load-tape` for the
+MCX EPROM path:
+
+```text
+xroar -machine mc10 -cart mcx128 \
+  -cart-rom build/mcx128.rom \
+  -load-tape build/space-invaders.c10
+```
+
+Select option `0`, wait for the MicroColor BASIC `OK` prompt, and continue with
+the cassette sequence below.
+
+XRoar can technically accept an emulator-only replacement with `-cart-rom` if
+the MCX boot code is patched to select one entry. A valid patch must retain the
+memory-test and ROM-copy initialization path. The project does not currently
+ship a patch generator because its internal startup paths still require
+validation against the physical module. A post-selection snapshot is the
+safer repeatable shortcut until that validation is complete.
+
 From PowerShell, use the project launcher:
 
 ```text
@@ -78,6 +114,26 @@ The launcher runs:
 ```text
 xroar -machine mc10 -cart mcx128 -run build/space-invaders.c10
 ```
+
+### Base-machine RAM alternatives
+
+For XRoar without MCX-128, use `-ram 8` for an 8 KiB model. Use `-ram 20` to
+model the usual 4 KiB onboard RAM plus a 16 KiB external RAM pack. XRoar also
+accepts `-ram 16` as 16 KiB total, but that is a different organization.
+
+Current MAME exposes the MC-10 choices `-ramsize 4K`, `-ramsize 8K`,
+`-ramsize 20K`, and `-ramsize 32K`. Use `-ramsize 20K` for the 4 KiB plus 16 KiB
+configuration. MCX-128 remains a separate cartridge configuration.
+
+To use the MCX boot-ROM image in XRoar, set the optional path before launching:
+
+```powershell
+$env:MC10_MCX_ROM = 'E:\path\to\mcx128.rom'
+.\space-invaders.ps1 run
+```
+
+With that variable set, the launcher passes `-cart-rom` and `-load-tape`, then
+waits for the manual boot-menu selection described above.
 
 XRoar's `-run` option attaches the `.c10` image and types `CLOADM` for a
 machine-code image. The MC-10 has no remote cassette motor-control line, so

@@ -10,6 +10,10 @@ The project layout follows the `E:\projects\ladybug` assembly-project pattern, b
 - XRoar with MC-10 support and an available `mc10.rom` firmware image.
 - Python 3 for cassette-image generation.
 
+An MCX-128 EPROM image is required for the physical module and for an XRoar
+run that exercises the MCX Basic boot menu. Do not commit that image. Set
+`MC10_MCX_ROM` to its Windows or WSL path when using it with the launcher.
+
 The template checkout contains XRoar at `/usr/local/bin/xroar`; its lwtools assembler targets 6809/6309 and is not used for MC-10 assembly.
 
 ## Build and run
@@ -35,9 +39,22 @@ xroar -machine mc10 -cart mcx128 -run build/space-invaders.c10
 
 `-cart mcx128` selects and attaches the built-in MCX-128 cartridge profile. The
 physical expansion boots in external-ROM mode and requires a suitable EPROM;
-the XRoar cassette test uses the stock MC-10 ROM plus the emulated MCX-128 RAM.
+the XRoar cassette test uses the stock MC-10 ROM plus the emulated MCX-128 RAM
+unless `MC10_MCX_ROM` is supplied.
+
+For base-machine memory experiments, XRoar accepts `-ram 8`, `-ram 16`, and
+`-ram 20`. Use `-ram 20` when modeling the common 4 KiB onboard RAM plus a 16
+KiB external pack. MAME's corresponding current options are `-ramsize 8K` and
+`-ramsize 20K`; attach `mcx128` separately when testing the banked 128 KiB
+expansion.
 
 MC-10 cassette emulation starts paused because the real machine has no remote motor-control line. XRoar's `-run` path attaches the cassette and types `CLOADM`; open cassette controls with `Ctrl+T`, press `Play`, then type `EXEC` after the load completes. The MCX-128 is only the RAM expansion in this setup. See [the exact cassette sequence](docs/timer-compare-test.md#exact-xroar-cassette-sequence) for the `-load-tape` manual path.
+
+When `MC10_MCX_ROM` is set, the launcher uses `-load-tape` instead of `-run`.
+The MCX EPROM presents its boot menu before BASIC is available, so select
+`[0] MICROCOLOR BASIC` first. Then enter `CLOADM`, start the cassette manually,
+and enter `EXEC` after the load completes. The complete sequence is documented
+in [the timer-compare procedure](docs/timer-compare-test.md#mcx-128-boot-selection).
 
 Use `.\space-invaders.ps1 check` to validate tool and source prerequisites without launching the emulator. Use `.\space-invaders.ps1 clean` to remove generated artifacts.
 
