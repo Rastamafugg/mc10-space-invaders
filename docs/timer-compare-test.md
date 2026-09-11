@@ -95,12 +95,27 @@ xroar -machine mc10 -cart mcx128 \
 Select option `2`, wait for the MCX BASIC `OK` prompt, and continue with
 the cassette sequence below.
 
-XRoar can technically accept an emulator-only replacement with `-cart-rom` if
-the MCX boot code is patched to select one entry. A valid patch must retain the
-memory-test and ROM-copy initialization path. The project does not currently
-ship a patch generator because its internal startup paths still require
-validation against the physical module. A post-selection snapshot is the
-safer repeatable shortcut until that validation is complete.
+XRoar can accept an emulator-only replacement with `-cart-rom` when the MCX
+boot code is patched to select one entry. The project supplies
+`scripts/patch_mcx128_rom.py`, which accepts only the verified MCX BASIC 2.1
+16 KiB image and forces the firmware selector value for `[2] MCX BASIC
+(LARGE)`. It retains the memory-test and ROM-copy initialization path. The
+generated image is an XRoar test artifact only and must not be programmed into
+a physical EPROM.
+
+Generate and run it with:
+
+```text
+python3 scripts/patch_mcx128_rom.py \
+  --input /path/to/mcx128bas.rom \
+  --output build/mcx128bas-large-direct.rom
+```
+
+From PowerShell, set `MC10_MCX_DIRECT_ROM` to the generated Windows path and
+run `.\space-invaders.ps1 run`. The launcher then uses `-run` rather than
+`-load-tape`; XRoar queues `CLOADM:EXEC` and starts the cassette after the ROM
+reaches the MCX BASIC prompt. The direct ROM reaches that prompt without a
+menu key, which removes the startup race.
 
 From PowerShell, use the project launcher:
 

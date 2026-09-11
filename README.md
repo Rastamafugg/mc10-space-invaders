@@ -13,6 +13,9 @@ The project layout follows the `E:\projects\ladybug` assembly-project pattern, b
 An MCX-128 EPROM image is required for the physical module and for an XRoar
 run that exercises the MCX Basic boot menu. Do not commit that image. Set
 `MC10_MCX_ROM` to its Windows or WSL path when using it with the launcher.
+The repository also provides an emulator-only direct-boot patch for the
+supported MCX BASIC 2.1 dump; it generates a separate ROM and never modifies
+the source image.
 
 The template checkout contains XRoar at `/usr/local/bin/xroar`; its lwtools assembler targets 6809/6309 and is not used for MC-10 assembly.
 
@@ -72,9 +75,28 @@ The MCX EPROM presents its boot menu before BASIC is available, so select
 and enter `EXEC` after the load completes. The complete sequence is documented
 in [the timer-compare procedure](docs/timer-compare-test.md#mcx-128-boot-selection).
 
+For the XRoar-only direct path, generate a patched copy from the original ROM
+and point the launcher at that copy:
+
+```text
+wsl python3 scripts/patch_mcx128_rom.py \
+  --input /home/USER/.xroar/roms/mcx128bas.rom \
+  --output build/mcx128bas-large-direct.rom
+$env:MC10_MCX_DIRECT_ROM = 'E:\projects\mc10-space-invaders\build\mcx128bas-large-direct.rom'
+.\space-invaders.ps1 run
+```
+
+The patch forces the firmware's internal selector value for `[2] MCX BASIC
+(LARGE)`, but retains the firmware memory test and ROM-copy initialization.
+`MC10_MCX_DIRECT_ROM` makes the launcher use XRoar's `-run` path, which queues
+`CLOADM:EXEC` after the direct ROM reaches the BASIC prompt. This image is for
+emulation only and must not be programmed into a physical MCX EPROM.
+
 The installed WSLg XRoar build renders the MCX boot menu, but the large-mode
 selection currently returns to that menu after its blank memory-test interval.
-It has not reached an MCX BASIC prompt in this configuration.
+That behavior applies to the original EPROM image. The generated
+`MC10_MCX_DIRECT_ROM` image reaches the MCX BASIC prompt without menu input;
+see [the direct-boot procedure](docs/mcx-direct-boot.md).
 
 Use `.\space-invaders.ps1 check` to validate tool and source prerequisites without launching the emulator. Use `.\space-invaders.ps1 clean` to remove generated artifacts.
 
@@ -86,6 +108,7 @@ Use `.\space-invaders.ps1 check` to validate tool and source prerequisites witho
 
 - [MC-10 platform notes](docs/mc10-platform.md)
 - [Physical MCX-128 register map](docs/mcx128-register-map.md)
+- [XRoar MCX BASIC (LARGE) direct boot](docs/mcx-direct-boot.md)
 - [Research and open questions](docs/research.md)
 - [Build workflow](wiki/internal/build-workflow.html)
 - [Roadmap](wiki/internal/roadmap.html)

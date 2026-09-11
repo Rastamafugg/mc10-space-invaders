@@ -19,16 +19,22 @@ if ($Mode -eq 'run') {
     }
     $emulator = if ($env:MC10_XROAR) { $env:MC10_XROAR } else { '/usr/local/bin/xroar' }
     $cassette = "$linuxRoot/build/space-invaders.c10"
-    if ($env:MC10_MCX_ROM) {
+    if ($env:MC10_MCX_DIRECT_ROM -or $env:MC10_MCX_ROM) {
         $emulatorArgs = @('-machine', 'mc10', '-cart', 'mcx128')
-        $mcxRom = $env:MC10_MCX_ROM
+        $mcxRom = if ($env:MC10_MCX_DIRECT_ROM) { $env:MC10_MCX_DIRECT_ROM } else { $env:MC10_MCX_ROM }
         if ($mcxRom -match '^[A-Za-z]:[\\/]') {
             $mcxRom = (& wsl.exe --exec wslpath -a -u $mcxRom).Trim()
             if ($LASTEXITCODE -ne 0 -or -not $mcxRom) {
-                throw 'WSL could not resolve MC10_MCX_ROM.'
+                throw 'WSL could not resolve the MCX ROM path.'
             }
         }
-        $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette)
+        if ($env:MC10_MCX_DIRECT_ROM) {
+            # The direct-boot image reaches the MCX BASIC prompt without
+            # keyboard input, so XRoar can use its CLOADM:EXEC autorun path.
+            $emulatorArgs += @('-cart-rom', $mcxRom, '-run', $cassette)
+        } else {
+            $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette)
+        }
     } else {
         # An MCX-128 cartridge without its EPROM maps an empty ROM at reset.
         # Use the stock machine as a loader control instead of showing a bad
