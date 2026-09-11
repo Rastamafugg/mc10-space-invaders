@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Build Workflow · Space Invaders MC-10</title>
+  <link rel="stylesheet" href="../shared/css/wiki.css">
+</head>
+<body>
+<div class="wiki-shell">
+  <nav class="wiki-nav"><a href="../index.html">← Wiki home</a><a href="index.html">Internal</a></nav>
+  <main>
+    <header class="wiki-header">
+      <p class="wiki-eyebrow">Internal · tooling</p>
+      <h1>Build and Emulator Workflow <span class="wiki-badge">internal</span></h1>
+      <p class="wiki-meta">Assemble, package, and launch a cassette-loaded MC6803 binary.</p>
+    </header>
+    <section>
+      <h2>Build stages</h2>
+      <ol>
+        <li>CRASM assembles `src/main.s` as an MC6803 Intel HEX image.</li>
+        <li>`scripts/make_c10.py` wraps the binary in MC-10 name, data, checksum, leader, EOF, and CUE records.</li>
+        <li>PowerShell invokes XRoar under WSL with the `mc10` machine and `mcx128` cartridge profile.</li>
+      </ol>
+    </section>
+    <section>
+      <h2>Commands</h2>
+      <pre><code>.space-invaders.ps1 build
+.space-invaders.ps1 run
+.space-invaders.ps1 check
+.space-invaders.ps1 clean</code></pre>
+      <p>The generated cassette is loaded with XRoar's `-run` path. Because MC-10 cassette hardware has no remote motor control, the emulator may require the tape-play control when running interactively.</p>
+    </section>
+    <footer class="wiki-footer"><p>See the repository README and <a href="platform.html">platform baseline</a> for address and loader details.</p></footer>
+  </main>
+</div>
+</body>
+</html>

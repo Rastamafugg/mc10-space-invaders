@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap · Space Invaders MC-10</title>
+  <link rel="stylesheet" href="../shared/css/wiki.css">
+</head>
+<body>
+<div class="wiki-shell">
+  <nav class="wiki-nav"><a href="../index.html">← Wiki home</a><a href="index.html">Internal</a></nav>
+  <main>
+    <header class="wiki-header">
+      <p class="wiki-eyebrow">Internal · planning</p>
+      <h1>Roadmap <span class="wiki-badge">internal</span></h1>
+      <p class="wiki-meta">Dependency order for the new MC-10 game.</p>
+    </header>
+    <ol>
+      <li><strong>Bootstrap:</strong> build and cassette-load the MC6803 smoke test with MCX-128.</li>
+      <li><strong>Platform:</strong> reconcile schematics, service-manual behavior, XRoar behavior, and physical test results.</li>
+      <li><strong>Rendering:</strong> select text, semigraphics, or custom character techniques and build a repeatable screen test.</li>
+      <li><strong>Input and timing:</strong> document keyboard matrix reads and measure the usable MC6803 frame budget.</li>
+      <li><strong>Game loop:</strong> implement player, invaders, projectile, collision, score, lives, and level state.</li>
+      <li><strong>Expansion:</strong> move data and optional runtime services into explicit MCX-128 banks.</li>
+      <li><strong>Distribution:</strong> retain `.bin` and `.c10` artifacts and validate XRoar, real cassette/audio, and physical MC-10 paths.</li>
+    </ol>
+    <p>Do not start game-level optimization before the platform and timing baselines are measured.</p>
+    <footer class="wiki-footer"><p>Initial scope is the bootstrap milestone only.</p></footer>
+  </main>
+</div>
+</body>
+</html>
+

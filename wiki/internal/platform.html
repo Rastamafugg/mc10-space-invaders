@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Platform Baseline · Space Invaders MC-10</title>
+  <link rel="stylesheet" href="../shared/css/wiki.css">
+</head>
+<body>
+<div class="wiki-shell">
+  <nav class="wiki-nav"><a href="../index.html">← Wiki home</a><a href="index.html">Internal</a></nav>
+  <main>
+    <header class="wiki-header">
+      <p class="wiki-eyebrow">Internal · platform</p>
+      <h1>Platform Baseline <span class="wiki-badge">internal</span></h1>
+      <p class="wiki-meta">Addresses and hardware boundaries used by the first smoke test.</p>
+    </header>
+    <section>
+      <h2>Confirmed baseline</h2>
+      <p>The target CPU is the MC6803, the video device is the MC6847, and the software-oriented screen buffer is `$4000-$41FF`. The first executable is placed at `$5000`.</p>
+      <p>XRoar's MCX128 model exposes bank and map registers at `$BF00` and `$BF01`; the smoke test verifies the all-RAM mapping at `$8000` and restores the default map.</p>
+    </section>
+    <section>
+      <h2>Unverified</h2>
+      <p>Physical MCX-128 reset behavior, bank ownership during cassette loading, alpha-mode values, keyboard scan details, and frame timing remain open. Emulator behavior is not physical-hardware acceptance.</p>
+    </section>
+    <footer class="wiki-footer"><p>Detailed source inventory is in <a href="../../docs/research.md">docs/research.md</a>.</p></footer>
+  </main>
+</div>
+</body>
+</html>
+
