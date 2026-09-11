@@ -7,6 +7,7 @@
 - [TRS-80 MC-10 Assembly Language Programming Tutorial](https://studylib.net/doc/27362152/673589727-6803-assembly-language-programming-in-trs80-mc10) is a secondary source that gives direct keyboard-read examples and discusses MC6803 timer interrupts and the lack of an implemented IRQ1 source.
 - [MC10 Keyboard Fix](https://lowlevel.ca/2021-04-09-MC10_Keyboard_Fix.html) independently quotes the ROM's modifier-key and debounce sequence.
 - [MC6847 datasheet copy](https://people.ece.cornell.edu/land/courses/ece4760/ideas/mc6847.pdf) supplies the nominal NTSC field/scanline specification used to compare against MAME's timing model.
+- [Redrawn MC-10 schematic](https://raw.githubusercontent.com/Danjovic/MC-10/main/MC-10%20Schematics.pdf) provides a visual wiring cross-check for the MC6847 `FS`/`HS` signals and the MC6803 interrupt and expansion nets; it is a redrawing, not a Tandy primary document.
 
 - [XRoar manual: Tandy MC-10](https://www.6809.org.uk/xroar/doc/xroar.shtml) documents the `mc10` architecture, the `mcx128` cartridge profile, and `.cas`/`.c10` cassette handling. It also notes that MC-10 cassette emulation defaults to stopped because the machine has no remote motor-control line.
 - [MC-10 service manual](https://cdn.hackaday.io/files/1837077859720288/Tandy_MC-10_Service_Manual.pdf) documents the hardware memory map, MC6803/MC6847 system, cassette block format, and the name-file fields used by `CLOADM`.
@@ -86,7 +87,9 @@ E clocks/field = 262 * 228 / 4             = 14,934
 ```
 
 This is a derived emulator-aligned model. It is not yet a physical
-oscilloscope measurement. The stock ROM does not establish a VDG frame ISR: it
+oscilloscope measurement. The MC6847 still generates `FS` at the field boundary;
+the unresolved point is whether that signal is routed into a usable MC6803
+interrupt on a stock board. The stock ROM does not establish a VDG frame ISR: it
 copies immediate-return handlers into `$4200`, polls the keyboard from its idle
 loop, and uses the MC6803 output-compare timer for sound timing. XRoar's field
 sync callback updates sound and host video presentation; it does not dispatch a

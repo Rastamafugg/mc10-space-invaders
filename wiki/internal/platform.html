@@ -21,7 +21,7 @@
       <p>The physical MCX-128 map assigns `$BF00` bit 0 to P0, which selects the bank group for `$0000-$3FFF` and `$C000-$FFFF`, and bit 1 to P1, which selects the bank group for `$4000-$BFFF`. `$BF01` bits 0-1 select the four ROM/RAM map modes.</p>
       <p>The smoke test selects all-RAM mode and verifies distinct signatures through all eight selectable 16K RAM windows. Its P1 routine is copied to `$D000` first, so P1 can change without remapping the executable at `$5000` or overwriting the P0 signature at `$C000`.</p>
       <p>The keyboard is an active-low eight-column matrix. Port 1 selects one column with a low bit; `$BFFF` returns the six ordinary row bits, and Port 2 bit 1 carries the Control, Break, and Shift line. The stock ROM scans all columns and confirms changes after a debounce delay.</p>
-      <p>The initial NTSC timing model is 228 master-clock periods per line, 262 lines per field, approximately 59.923 Hz, and 14,934 MC6803 E-clock periods per field. This is derived from the service-manual clock and current MC6847 emulator timing, not yet a physical measurement.</p>
+      <p>The initial NTSC timing model is 228 master-clock periods per line, 262 lines per field, approximately 59.923 Hz, and 14,934 MC6803 E-clock periods per field. The MC6847 has an FS field-sync output, but no verified route from FS to a periodic MC6803 IRQ/NMI source has been identified. The figures are derived from the service-manual clock and current MC6847 emulator timing, not yet a physical measurement.</p>
     </section>
     <section>
       <h2>Source boundary</h2>

@@ -77,8 +77,10 @@ the current MAME implementation documents 228 as the experimentally confirmed
 value. Use 228 for emulator pacing and retain a physical capture or oscilloscope
 check as the acceptance test.
 
-No VDG-to-CPU frame interrupt has been identified in the sources reviewed. The
-ROM initializes the copied interrupt entries at `$4200` to return immediately,
+The MC6847 does have an `FS` field-sync output. In this document, “no VDG-to-CPU
+frame interrupt” means that no verified connection from `FS` to an MC6803 IRQ or
+NMI source has been identified in the sources reviewed. The ROM initializes the
+copied interrupt entries at `$4200` to return immediately,
 uses the MC6803 output-compare timer for sound timing, and polls the keyboard in
 its idle path. XRoar's MC-10 implementation receives VDG field-sync callbacks
 for sound and video presentation, not as a CPU interrupt. Therefore the game
