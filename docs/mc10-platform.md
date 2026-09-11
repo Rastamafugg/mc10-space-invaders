@@ -87,6 +87,12 @@ for sound and video presentation, not as a CPU interrupt. Therefore the game
 loop should initially use an explicit software cadence or a tested MC6803 timer
 compare; it should not assume that MC6847 field sync invokes a handler.
 
+The current executable includes a [timer-compare cadence test](timer-compare-test.md).
+It schedules 60 output compares at `$3A56` E clocks, displays the result, and
+toggles P2.0 for external comparison with the MC6847 `FS` signal. This verifies
+timer-driven cadence, while an oscilloscope or logic analyzer is still required
+to verify the phase relationship to physical `FS`.
+
 ## Base memory map
 
 | Range | Purpose | Status |
@@ -147,4 +153,4 @@ Each block has the `$55`, `$3C`, type, length, payload, checksum, `$55` framing 
 - Confirm the physical EPROM boot path and expanded-bank state during cassette loading.
 - Determine whether the final game should use direct screen RAM, ROM character output, or custom semigraphics glyphs.
 - Validate the keyboard matrix polarity and modifier-key path on physical hardware.
-- Measure frame-sync and timer-compare behavior on physical hardware; the figures above are the initial NTSC timing model.
+- Measure frame-sync and timer-compare behavior on physical hardware using the [timer-compare procedure](timer-compare-test.md); the figures above are the initial NTSC timing model.

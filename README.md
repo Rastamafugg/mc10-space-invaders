@@ -43,7 +43,7 @@ Use `.\space-invaders.ps1 check` to validate tool and source prerequisites witho
 
 ## Current test program
 
-`src/main.s` initializes the MC-10 alpha video mode, clears the 32×16 screen, writes a title and status line, switches MCX-128 to all-RAM mode, verifies distinct signatures through all eight selectable 16 KiB RAM windows, restores the normal map, and then idles. It is a loader/platform smoke test, not the game implementation.
+`src/main.s` initializes the MC-10 alpha video mode, clears the 32×16 screen, writes a title and status line, switches MCX-128 to all-RAM mode, verifies distinct signatures through all eight selectable 16 KiB RAM windows, restores the normal map, runs the MC6803 timer-compare cadence test, and then idles. The timer test reports `TIMER: OK` after 60 predicted MC6847 fields and toggles P2.0 for comparison with physical MC6847 FS timing. See [the timer-compare procedure](docs/timer-compare-test.md). It is a loader/platform smoke test, not the game implementation.
 
 ## Project knowledge
 

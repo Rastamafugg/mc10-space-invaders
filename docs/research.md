@@ -104,6 +104,7 @@ cycle-critical animation is committed.
 - Target `$5000` for the first executable. This leaves the screen and the documented BASIC workspace below it untouched.
 - Treat MCX-128 as a runtime memory provider, not as a cartridge ROM boot image. The emulator test attaches the `mcx128` profile with `-cart mcx128`, then loads the cassette using the stock MC-10 ROM.
 - Test all eight selectable 16 KiB windows with distinct signatures. P0 is tested from `$5000`; a copied routine at `$D000` tests P1 without remapping the active code window.
+- Use the [timer-compare cadence test](timer-compare-test.md) as the initial frame-pacing experiment: 14,934 E clocks per predicted field, 60 output compares, and a P2.0 marker for external FS capture.
 
 ## Emulator comparison
 
@@ -144,5 +145,5 @@ it is a useful secondary check rather than the primary development target.
 - Establish a source and license policy before copying external source into this repository.
 - Verify P1 switching, `$0014` direct-page selection, reset contents, and the physical EPROM boot path against a real MCX-128.
 - Validate the keyboard matrix and modifier-key polarity against a physical MC-10, including the Port 2 bit-1 path.
-- Measure MC6847 field sync and MC6803 timer-compare behavior on physical hardware; use the 228-clock model as the emulator baseline.
+- Measure MC6847 field sync and MC6803 timer-compare behavior on physical hardware using the [timer-compare procedure](timer-compare-test.md); use the 228-clock model as the emulator baseline.
 - Compare XRoar's current MC-10 implementation with physical schematics as additional details emerge. XRoar itself labels MC-10 support unfinished and unsupported, so emulator success is not hardware acceptance.
