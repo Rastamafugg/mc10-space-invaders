@@ -9,6 +9,82 @@ This file is the platform baseline for the project. Addresses marked as implemen
 - Text display: 32 columns by 16 rows, screen memory `$4000-$41FF`.
 - The MC-10 video-mode write is exposed through the `$9000-$BFFF` I/O area. The smoke test uses `$BFFF` with `$20` to select alpha mode, matching the current XRoar implementation's D5-to-GNA mapping.
 
+## Keyboard scanning
+
+The keyboard is an active-low matrix. Port 1 supplies eight column/strobe
+outputs and the keyboard returns six ordinary row bits through the `$9000-$BFFF`
+read slot. The three modifier keys that occupy the seventh row are returned on
+Port 2 bit 1 instead of the ordinary row read. The service manual describes the
+electrical scan rule; the current [MAME MC-10 driver](https://raw.githubusercontent.com/mamedev/mame/master/src/mame/trs/mc10.cpp)
+and the [stock ROM disassembly](https://raw.githubusercontent.com/RevCurtisP/MC10/master/disasm/MC10%20Disassembly.txt)
+provide the matrix and software details.
+
+| MC6803 register | Address | Use | Reset/reference value |
+| --- | ---: | --- | ---: |
+| DDR1 | `$0000` | Port 1 direction; keyboard strobe lines | `$FF` |
+| DDR2 | `$0001` | Port 2 direction; bit 0 output, keyboard/miscellaneous inputs | `$01` |
+| PORT1 | `$0002` | Active-low column select | one low bit |
+| PORT2 | `$0003` | Port 2 input; bit 1 carries PA6 modifier state | `$01` written at reset |
+
+Use one low bit in `PORT1` at a time: `$FE`, `$FD`, `$FB`, `$F7`, `$EF`,
+`$DF`, `$BF`, and `$7F` select PB0 through PB7. Read `$BFFF` and mask with
+`$3F`; a cleared bit means that the corresponding PA0-PA5 row is pressed.
+Read `PORT2` and test bit 1 separately for Control, Break, and Shift. The
+physical manual recommends one selected column. MAME additionally models the
+electrical result of multiple selected columns as an AND, but that is not a
+software contract to depend on.
+
+The matrix reproduced by the current MAME source is:
+
+| Row | PB0 | PB1 | PB2 | PB3 | PB4 | PB5 | PB6 | PB7 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PA6 | Ctrl | — | Break | — | — | — | — | Shift |
+| PA5 | 8 | 9 | `:` | `;` | `,` | `-` | `.` | `/` |
+| PA4 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| PA3 | X | Y | Z | — | — | — | Enter | Space |
+| PA2 | P | Q | R | S | T | U | V | W |
+| PA1 | H | I | J | K | L | M | N | O |
+| PA0 | `@` | A | B | C | D | E | F | G |
+
+The ROM routine at `$F879-$F8CD` checks Break first, scans all eight columns,
+stores one byte per column at `$4231-$4238`, and performs a second read after
+the `$421D` debounce delay before accepting a change. The initial ROM value is
+`$045E`; it is a software debounce constant, not a measured keyboard response
+time. The ROM's idle loop polls this routine, so a game can use a smaller
+purpose-built scan when it only needs directional or fire keys.
+
+## Frame timing and CPU synchronization
+
+The service manual identifies a common `3.579545 MHz` oscillator, divides it by
+four for the MC6803 E clock, and states that the VDG owns the low half of E while
+the CPU uses the high half. The MC6847 datasheet describes a 262-line NTSC
+field. Current [MAME MC6847 timing code](https://github.com/mamedev/mame/blob/master/src/devices/video/mc6847.cpp)
+uses 228 master-clock periods per line based on the datasheet and hardware
+experimentation; its [MC-10 driver](https://raw.githubusercontent.com/mamedev/mame/master/src/mame/trs/mc10.cpp)
+configures the same crystal, a 262-line raster, and 243 visible lines.
+
+| Quantity | Calculation | Initial NTSC model |
+| --- | --- | ---: |
+| MC6803 E clock | `3,579,545 / 4` | `894,886.25 Hz` |
+| Horizontal period | `228 / 3,579,545` | `63.695 µs` |
+| Field period | `262 × 228 / 3,579,545` | `16.688 ms` |
+| Field rate | inverse field period | `59.923 Hz` |
+| E-clock periods per field | `262 × 228 / 4` | `14,934` |
+
+These are derived budget figures, not a claim that the physical machine has
+been measured. The datasheet gives 227.5 clocks as a nominal scanline, while
+the current MAME implementation documents 228 as the experimentally confirmed
+value. Use 228 for emulator pacing and retain a physical capture or oscilloscope
+check as the acceptance test.
+
+No VDG-to-CPU frame interrupt has been identified in the sources reviewed. The
+ROM initializes the copied interrupt entries at `$4200` to return immediately,
+uses the MC6803 output-compare timer for sound timing, and polls the keyboard in
+its idle path. XRoar's MC-10 implementation receives VDG field-sync callbacks
+for sound and video presentation, not as a CPU interrupt. Therefore the game
+loop should initially use an explicit software cadence or a tested MC6803 timer
+compare; it should not assume that MC6847 field sync invokes a handler.
+
 ## Base memory map
 
 | Range | Purpose | Status |
@@ -68,4 +144,5 @@ Each block has the `$55`, `$3C`, type, length, payload, checksum, `$55` framing 
 - Verify P1 switching and `$0014` direct-page selection on physical hardware.
 - Confirm the physical EPROM boot path and expanded-bank state during cassette loading.
 - Determine whether the final game should use direct screen RAM, ROM character output, or custom semigraphics glyphs.
-- Measure the usable frame budget at the MC6803 clock rate before committing to a game architecture.
+- Validate the keyboard matrix polarity and modifier-key path on physical hardware.
+- Measure frame-sync and timer-compare behavior on physical hardware; the figures above are the initial NTSC timing model.
