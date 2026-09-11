@@ -46,16 +46,33 @@ even/odd register decode.
 
 ## Bank selection
 
-The MCX-128 divides the address space into two logical 32 KiB pages:
+The MCX-128 exposes 64 KiB of address space at a time, divided into four
+16 KiB CPU windows. The two control bits select between two 32 KiB backing
+groups; they do not select one of eight physical banks directly:
 
-| Selector | Address ranges | Controlled by |
+| Logical selector window | Address ranges | Controlled by |
 | --- | --- | --- |
 | Page 0 | `$0000-$3FFF` and `$C000-$FFFF` | `P0`, bit 0 of `$BF00` |
 | Page 1 | `$4000-$BFFF` | `P1`, bit 1 of `$BF00` |
 
-Each selector chooses between the base and alternate bank groups. The full
-expansion contains eight 16 KiB RAM banks. In the XRoar implementation, the
-base group is RAM pages 0-3 and the alternate group is pages 4-7.
+Each selector chooses between a base and alternate 32 KiB group. Each group
+contains two 16 KiB banks in the corresponding CPU window. The full expansion
+therefore contains four 32 KiB groups, or eight 16 KiB RAM banks.
+
+The complete 16 KiB mapping, using the XRoar bank-page numbering, is:
+
+| CPU address window | Selector | Selector `0` | Selector `1` |
+| --- | --- | --- | --- |
+| `$0000-$3FFF` | `P0` | RAM page 0 | RAM page 4 |
+| `$4000-$7FFF` | `P1` | RAM page 1 | RAM page 5 |
+| `$8000-$BFFF` | `P1` | RAM page 2 | RAM page 6 |
+| `$C000-$FEFF` | `P0` | RAM page 3 | RAM page 7 |
+
+Thus `P0` selects the low and high 16 KiB halves of one 32 KiB logical
+window, while `P1` selects the two middle 16 KiB halves. `$FF00-$FFFF` is a
+special fixed 256-byte region in 16 KiB all-RAM mode and is not P0-switched.
+`$BF80-$BFFF` is also excluded from the `$8000-$BFFF` RAM window because it
+is the MC-10 keyboard/VDG/sound I/O region.
 
 There are important exceptions:
 

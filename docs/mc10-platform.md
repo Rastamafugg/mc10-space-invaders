@@ -28,9 +28,12 @@ The initial executable loads at `$5000` so it remains outside the screen, BASIC 
 The physical register map is documented separately in
 [`docs/mcx128-register-map.md`](mcx128-register-map.md). The short form is:
 
-- `$BF00` bit 0 (`P0`) selects the bank group for Page 0, `$0000-$3FFF` and
-  `$C000-$FFFF`.
-- `$BF00` bit 1 (`P1`) selects the bank group for Page 1, `$4000-$BFFF`.
+- `$BF00` bit 0 (`P0`) selects between two 32K bank groups for Page 0,
+  `$0000-$3FFF` and `$C000-$FFFF`.
+- `$BF00` bit 1 (`P1`) selects between two 32K bank groups for Page 1,
+  `$4000-$BFFF`.
+- The four visible 16K CPU windows map to eight physical 16K banks: P0 uses
+  banks 0/4 and 3/7, while P1 uses banks 1/5 and 2/6.
 - `$BF01` bits 0-1 (`M0`/`M1`) select 16K external ROM, 8K RAM plus external
   ROM, 8K RAM plus internal ROM, or 16K RAM.
 - `$BF80-$BFFF` remains the base keyboard/VDG/sound I/O region, and the VDG

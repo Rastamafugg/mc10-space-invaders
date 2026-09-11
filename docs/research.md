@@ -17,8 +17,8 @@
 
 | Source | Confirmed behavior | Limit |
 | --- | --- | --- |
-| MCX128 Hardware Info | `$BF00` D0=`P0`, D1=`P1`; `$BF01` D0=`M0`, D1=`M1`; Page 0 is `$0000-$3FFF` plus `$C000-$FFFF`; Page 1 is `$4000-$BFFF`; four ROM/RAM modes | Physical document is the authoritative map used here, but the real board still needs electrical and software validation |
-| XRoar `mcx128.c` | Eight 16 KiB RAM banks; P0/P1 select alternate groups; `$BF80-$BFFF` keeps I/O priority; reset clears selectors and map mode; all-RAM fixes `$FF00-$FFFF` to bank 0 | Emulator implementation is not proof of a physical board revision or timing behavior |
+| MCX128 Hardware Info | `$BF00` D0=`P0`, D1=`P1`; `$BF01` D0=`M0`, D1=`M1`; Page 0 is `$0000-$3FFF` plus `$C000-$FFFF`; Page 1 is `$4000-$BFFF`; four ROM/RAM modes; eight 16 KiB banks are exposed through two selectable 32 KiB groups | Physical document is the authoritative map used here, but the real board still needs electrical and software validation |
+| XRoar `mcx128.c` | Eight 16 KiB RAM banks; P0/P1 select alternate groups, mapping pages 0/3 or 4/7 and 1/2 or 5/6; `$BF80-$BFFF` keeps I/O priority; reset clears selectors and map mode; all-RAM fixes the final 256-byte region | Emulator implementation is not proof of a physical board revision or timing behavior |
 | MC-10 ROM disassembly | MC6803 port definitions, `$BFFF` VDG/keyboard access, cassette writer/loader routines | Stock ROM predates MCX-128, so it cannot confirm MCX registers |
 | MC10.js | Independent base-machine video, keyboard/VDG, and internal-register model | No MCX-128 implementation |
 
