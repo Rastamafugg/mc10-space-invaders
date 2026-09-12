@@ -16,6 +16,7 @@ MCX_MAP         EQU     $BF01
 MCX_BANK_P0     EQU     $01
 MCX_BANK_P1     EQU     $02
 MCX_MAP_ALL_RAM EQU     $03
+MCX_MAP_STOCK   EQU     $02
 MCX_FLAG        EQU     $0020
 MCX_TEST_P0_LOW EQU     $1000
 MCX_TEST_P0_HIGH EQU    $C000
@@ -177,9 +178,12 @@ p0_final_alt_high_ok = *
         STAA    MCX_BANK
 all_banks_ok = *
 
-        ; Restore the MCX-128 power-on map before normal runtime code.
-        CLRA
+        ; Restore the stock-ROM map before normal runtime code. This keeps the
+        ; loaded program at $5000 in expansion RAM while exposing the internal
+        ; MC-10 ROM in the upper ROM window. A bare MC-10 ignores these writes.
+        LDAA    #MCX_MAP_STOCK
         STAA    MCX_MAP
+        CLRA
         STAA    MCX_BANK
 
         ; Fixed-width title and status rows. MC-10 alpha screen codes match
@@ -322,8 +326,9 @@ main_loop = *
         BRA     main_loop
 
 mcx_failure = *
-        CLRA
+        LDAA    #MCX_MAP_STOCK
         STAA    MCX_MAP
+        CLRA
         STAA    MCX_BANK
         LDX     #SCREEN+96
         LDAA    #$4D

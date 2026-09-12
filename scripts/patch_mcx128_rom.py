@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Create an XRoar-only MCX BASIC (LARGE) direct-boot ROM image.
+"""Create an XRoar-only MCX direct-boot ROM image.
 
 The input is the unmodified 16 KiB MCX BASIC 2.1 EPROM dump. The output is
-not suitable for programming a physical EPROM: it bypasses the keyboard menu
-selection while retaining the firmware's RAM test and ROM-copy path.
+not suitable for programming a physical EPROM. The default ``large`` mode
+bypasses the keyboard menu while retaining the MCX firmware RAM test and
+ROM-copy path. The ``stock`` mode installs a diagnostic handoff to the host
+MC-10 ROM after selecting the post-menu stock map.
 """
 
 from __future__ import annotations
@@ -28,8 +30,23 @@ ORIGINAL = bytes.fromhex(
 )
 PATCHED = bytes.fromhex("CC FE 10 97 02 86 01 20 0C") + bytes([0x01]) * 12
 
+# The stock-mode diagnostic cannot use the MCX firmware's normal copy path in
+# the current XRoar MCX implementation. Start from the external EPROM reset
+# vector, copy a small handoff into external RAM at $D020, select M=2, and
+# continue at the stock MC-10 reset entry in the internal ROM. The copied
+# handoff is required because $D000-$DFFF changes from EPROM to RAM when M=2.
+STOCK_BOOTSTRAP_OFFSET = 0x1000  # $D000
+STOCK_TARGET_OFFSET = 0x1020  # $D020
+STOCK_RESET_VECTOR_OFFSET = 0x3FFE  # $FFFE
+STOCK_BOOTSTRAP = bytes.fromhex(
+    "8E D0 1F CE D0 20 C6 0D 32 A7 00 08 5A 26 F9 7E D0 20"
+)
+STOCK_TARGET = bytes.fromhex(
+    "86 00 B7 BF 00 86 02 B7 BF 01 7E F7 2E"
+)
 
-def patch_image(raw: bytes) -> bytes:
+
+def _validate_input(raw: bytes) -> None:
     if len(raw) != ROM_SIZE:
         raise ValueError(f"input must be exactly {ROM_SIZE} bytes, got {len(raw)}")
 
@@ -39,6 +56,20 @@ def patch_image(raw: bytes) -> bytes:
             "input is not the supported MCX BASIC 2.1 ROM dump "
             f"(sha256 {KNOWN_SHA256}, got {digest})"
         )
+
+
+def patch_image(raw: bytes, mode: str = "large") -> bytes:
+    _validate_input(raw)
+
+    if mode == "stock":
+        image = bytearray(raw)
+        image[STOCK_BOOTSTRAP_OFFSET : STOCK_BOOTSTRAP_OFFSET + len(STOCK_BOOTSTRAP)] = STOCK_BOOTSTRAP
+        image[STOCK_TARGET_OFFSET : STOCK_TARGET_OFFSET + len(STOCK_TARGET)] = STOCK_TARGET
+        image[STOCK_RESET_VECTOR_OFFSET : STOCK_RESET_VECTOR_OFFSET + 2] = bytes.fromhex("D0 00")
+        return bytes(image)
+
+    if mode != "large":
+        raise ValueError(f"unsupported boot mode: {mode}")
 
     current = raw[PATCH_OFFSET : PATCH_OFFSET + len(ORIGINAL)]
     if current != ORIGINAL:
@@ -53,17 +84,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path, help="original 16 KiB ROM")
     parser.add_argument("--output", required=True, type=Path, help="generated XRoar ROM")
+    parser.add_argument(
+        "--mode",
+        choices=("large", "stock"),
+        default="large",
+        help="direct-boot target: MCX BASIC (LARGE) or stock MC-10 BASIC",
+    )
     args = parser.parse_args()
 
     try:
-        output = patch_image(args.input.read_bytes())
+        output = patch_image(args.input.read_bytes(), args.mode)
     except (OSError, ValueError) as exc:
         raise SystemExit(f"patch_mcx128_rom: {exc}") from exc
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(output)
     print(
-        "patch_mcx128_rom: MCX BASIC (LARGE) direct-boot image written "
+        f"patch_mcx128_rom: {args.mode} direct-boot image written "
         f"to {args.output} ({len(output)} bytes)"
     )
     print(f"patch_mcx128_rom: output sha256 {hashlib.sha256(output).hexdigest()}")

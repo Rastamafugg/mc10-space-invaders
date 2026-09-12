@@ -67,3 +67,42 @@ is rejected by MCX BASIC.
 The generated image is intentionally emulator-only. It must not be programmed
 into an EPROM or used as evidence that the physical MCX-128 boot path has been
 modified.
+
+## Stock-mode diagnostic image
+
+The physical MCX-128 menu's `[0] MICROCOLOR BASIC` path is also difficult to
+exercise reliably in the current XRoar MCX implementation. The script can
+therefore generate a second emulator-only diagnostic image that enters the
+host MC-10's stock BASIC reset path directly:
+
+```text
+python3 scripts/patch_mcx128_rom.py \
+  --input build/mcx128.rom \
+  --output build/mcx128-stock-direct.rom \
+  --mode stock
+```
+
+This mode installs a small external-ROM bootstrap at `$D000`, copies a handoff
+stub into external RAM at `$D020`, writes `P0=0`, `P1=0`, and `$BF01=2`, then
+jumps to the internal stock MC-10 reset entry at `$F72E`. In that map, stock
+ROM reads are selected while the MCX expansion remains attached. The copied
+stub is necessary because `$D000-$DFFF` changes from external ROM to external
+RAM when the map is selected.
+
+Run it with `MC10_MCX_DIRECT_ROM` or attach it explicitly with XRoar:
+
+```powershell
+$env:MC10_MCX_DIRECT_ROM = 'E:\projects\mc10-space-invaders\build\mcx128-stock-direct.rom'
+$env:MC10_MCX_DIRECT_MODE = 'stock'
+.\space-invaders.ps1 run
+```
+
+The image is a diagnostic handoff, not a replacement for the physical EPROM:
+it bypasses the MCX boot menu and firmware initialization, and it must not be
+programmed into an MCX-128 cartridge. It is useful for isolating stock BASIC
+cassette loading from MCX firmware or bank-mapping behavior.
+
+The stock direct mode intentionally does not queue `CLOADM`; XRoar's
+auto-keyboard breakpoint is unreliable when the MCX cartridge is attached to
+the host stock ROM. At the prompt, enter `CLOADM`, press `Ctrl+T`, press
+`Play`, wait for the cassette transfer to finish, and enter `EXEC`.

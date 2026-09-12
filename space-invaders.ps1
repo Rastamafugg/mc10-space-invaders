@@ -28,7 +28,16 @@ if ($Mode -eq 'run') {
                 throw 'WSL could not resolve the MCX ROM path.'
             }
         }
-        if ($env:MC10_MCX_DIRECT_ROM) {
+        $directMode = if ($env:MC10_MCX_DIRECT_MODE) { $env:MC10_MCX_DIRECT_MODE } else { 'large' }
+        if ($directMode -notin @('large', 'stock')) {
+            throw "MC10_MCX_DIRECT_MODE must be 'large' or 'stock'."
+        }
+        if ($env:MC10_MCX_DIRECT_ROM -and $directMode -eq 'stock') {
+            # Keep the stock BASIC prompt usable. XRoar's auto-keyboard
+            # breakpoint does not reliably detect the host-ROM warm start
+            # when the MCX cartridge is attached.
+            $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette)
+        } elseif ($env:MC10_MCX_DIRECT_ROM) {
             # MCX BASIC does not accept XRoar's generic CLOADM:EXEC syntax.
             # Queue CLOADM only; the cassette Play control and EXEC remain
             # explicit so the direct path follows the MCX BASIC sequence.

@@ -100,6 +100,26 @@ That behavior applies to the original EPROM image. The generated
 `MC10_MCX_DIRECT_ROM` image reaches the MCX BASIC prompt without menu input;
 see [the direct-boot procedure](docs/mcx-direct-boot.md).
 
+To isolate stock MC-10 BASIC cassette behavior while retaining the MCX
+cartridge mapping, generate the stock-mode diagnostic image:
+
+```text
+wsl python3 scripts/patch_mcx128_rom.py \
+  --input build/mcx128.rom \
+  --output build/mcx128-stock-direct.rom \
+  --mode stock
+$env:MC10_MCX_DIRECT_ROM = 'E:\projects\mc10-space-invaders\build\mcx128-stock-direct.rom'
+$env:MC10_MCX_DIRECT_MODE = 'stock'
+.\space-invaders.ps1 run
+```
+
+This emulator-only image forces `P0=0`, `P1=0`, and `$BF01=2`, then enters the
+host stock MC-10 ROM at `$F72E`. It bypasses the physical MCX boot menu and
+must not be programmed into an EPROM. Stock mode leaves the BASIC prompt
+usable for manual `CLOADM`, cassette `Play`, and `EXEC`; it does not queue
+`CLOADM` because the XRoar auto-keyboard breakpoint is unreliable with the
+MCX cartridge attached. See [the stock-mode diagnostic notes](docs/mcx-direct-boot.md#stock-mode-diagnostic-image).
+
 Use `.\space-invaders.ps1 check` to validate tool and source prerequisites without launching the emulator. Use `.\space-invaders.ps1 clean` to remove generated artifacts.
 
 ## Current test program

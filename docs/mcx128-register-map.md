@@ -124,8 +124,9 @@ The smoke test therefore uses this sequence:
    for the P0 signature.
 5. From `$D000`, write and verify signatures through the P1=0 and P1=1 middle
    window pairs, covering the remaining four 16K banks.
-6. Return to `$5000`, then restore `$BF01=0` and `$BF00=0` before normal MC-10
-   ROM or video use.
+6. Return to `$5000`, then restore `$BF01=2` and `$BF00=0` before normal
+   runtime. Mode `2` keeps `$5000` in expansion RAM while exposing the stock
+   MC-10 ROM in the upper ROM window; a bare MC-10 ignores these writes.
 
 The P1 path, `$0014` direct-page selection, reset contents, and physical
 cassette-loader interaction remain hardware-validation items.
