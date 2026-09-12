@@ -4,7 +4,7 @@ This repository is the initial bare-metal assembly project for a Space Invaders 
 
 The project layout follows the `E:\projects\ladybug` assembly-project pattern, but the CoCo 3/GIME assumptions are intentionally removed. The first milestone is a cassette-loaded executable that proves the MC6803 assembler path, MC-10 screen output, and MCX-128 register/RAM access.
 
-Persistent operational notes are in the [project wiki](wiki/index.html), including
+Persistent operational notes are in the [project wiki](wiki/Home.md), including
 the XRoar and MAME cassette sequences, WSLg/CU limitations, and command-injection
 lessons discovered during emulator testing.
 
@@ -192,7 +192,7 @@ retained as `src/environment-test.s` and built with the `utility` target. See
 - [MCX-128 cassette-loading fault analysis](docs/mcx-cassette-loading.md)
 - [XRoar MCX BASIC (LARGE) direct boot](docs/mcx-direct-boot.md)
 - [Research and open questions](docs/research.md)
-- [Build workflow](wiki/internal/build-workflow.html)
-- [Roadmap](wiki/internal/roadmap.html)
+- [Build workflow](wiki/Build-and-emulator-workflow.md)
+- [Roadmap](wiki/Roadmap.md)
 
 The platform notes distinguish facts confirmed by schematics/manuals or the XRoar implementation from assumptions that require physical hardware or further source analysis.
