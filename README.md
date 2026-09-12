@@ -4,6 +4,10 @@ This repository is the initial bare-metal assembly project for a Space Invaders 
 
 The project layout follows the `E:\projects\ladybug` assembly-project pattern, but the CoCo 3/GIME assumptions are intentionally removed. The first milestone is a cassette-loaded executable that proves the MC6803 assembler path, MC-10 screen output, and MCX-128 register/RAM access.
 
+Persistent operational notes are in the [project wiki](wiki/index.html), including
+the XRoar and MAME cassette sequences, WSLg/CU limitations, and command-injection
+lessons discovered during emulator testing.
+
 ## Requirements
 
 - WSL with the `crasm` cross-assembler, which supports MC6803, and Python 3. Ubuntu provides it as the `crasm` package. Set `MC10_ASM=/path/to/crasm` when it is not in `PATH`, or run `bash scripts/bootstrap_crasm.sh` to extract the package into the ignored `.tools` directory without root access.

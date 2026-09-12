@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MC-10 Cassette Loading · Space Invaders MC-10</title>
+  <link rel="stylesheet" href="../shared/css/wiki.css">
+</head>
+<body>
+<div class="wiki-shell">
+  <nav class="wiki-nav"><a href="../index.html">← Wiki home</a><a href="index.html">Internal</a></nav>
+  <main>
+    <header class="wiki-header">
+      <p class="wiki-eyebrow">Internal · procedure</p>
+      <h1>MC-10 Cassette Loading <span class="wiki-badge">internal</span></h1>
+      <p class="wiki-meta">Exact loader sequence and failure diagnosis for stock BASIC, MCX BASIC, XRoar, and MAME.</p>
+    </header>
+    <section>
+      <h2>What each stage does</h2>
+      <ol>
+        <li><code>CLOADM</code> tells BASIC to enter the machine-language cassette loader.</li>
+        <li>Playback supplies the audio data. It must begin while the MC-10 shows the loader search state, commonly <code>S</code>.</li>
+        <li>After the transfer, BASIC displays the file name and returns to <code>OK</code>.</li>
+        <li><code>EXEC</code> enters the loaded image at its cassette execution address, normally <code>$5000</code> for this project.</li>
+      </ol>
+    </section>
+    <section>
+      <h2>Manual XRoar sequence</h2>
+      <pre><code>xroar -machine mc10 -load-tape build/timing-calibrator.c10</code></pre>
+      <ol>
+        <li>Focus the MC-10 display.</li>
+        <li>Type <code>CLOADM</code> and press Return.</li>
+        <li>Press <code>Ctrl+T</code> to open cassette controls.</li>
+        <li>Select the input tape and press <code>Play</code> once while the loader is searching.</li>
+        <li>Wait for the tape to stop and for BASIC to return to <code>OK</code>.</li>
+        <li>Type <code>EXEC</code> and press Return.</li>
+      </ol>
+      <p>Do not press Reset between <code>CLOADM</code> and Play. Do not start playback before entering <code>CLOADM</code>. A visible <code>S</code> means the loader is searching; it is not a successful transfer.</p>
+    </section>
+    <section>
+      <h2>MCX BASIC sequence</h2>
+      <p>The MCX-128 EPROM presents a boot menu before BASIC is available. Select <code>2</code>, MCX BASIC (LARGE), then wait for the memory test and ROM-copy operation to finish. At the resulting prompt, use the same <code>CLOADM</code>, Play, wait for <code>OK</code>, and <code>EXEC</code> sequence.</p>
+      <p>The MCX-128 does not load or execute cassette data itself. It supplies memory mapping and firmware; BASIC and the MC-10 cassette routines perform the transfer.</p>
+      <p>The emulator-only direct ROM path bypasses the menu by patching the firmware selector. That image must not be programmed into a physical EPROM.</p>
+    </section>
+    <section>
+      <h2>MAME sequence</h2>
+      <pre><code>mame.exe mc10 -ramsize 20K -cass build\timing-calibrator.c10</code></pre>
+      <p>Enter <code>CLOADM</code>, press Return, then press MAME's default <code>F2</code> tape-play key. After BASIC returns to <code>OK</code>, enter <code>EXEC</code> and press Return. <code>Shift+F2</code> stops the tape.</p>
+      <p>The automated equivalent is <a href="../../scripts/mame-cassette-autoplay.lua"><code>scripts/mame-cassette-autoplay.lua</code></a>. It uses <code>post_coded</code> with <code>{ENTER}</code>, calls <code>cassette:play()</code>, posts <code>EXEC{ENTER}</code>, and saves a PNG snapshot.</p>
+    </section>
+    <section>
+      <h2>Failure diagnosis</h2>
+      <table>
+        <tr><th>Display or behavior</th><th>Likely cause</th></tr>
+        <tr><td>Reverse <code>@</code> screen</td><td>MCX cartridge profile is attached without a valid MCX ROM.</td></tr>
+        <tr><td>No cursor or no BASIC prompt</td><td>Firmware is still in its boot or memory-test path, or an incompatible direct ROM was selected.</td></tr>
+        <tr><td><code>S</code> remains indefinitely</td><td>The loader is waiting for audio, the tape was started at the wrong time, or the image format/audio path is incompatible.</td></tr>
+        <tr><td>File name and <code>OK</code>, but no test screen</td><td>The binary transferred successfully but <code>EXEC</code> was not entered or not accepted.</td></tr>
+        <tr><td><code>MCX128 ERROR</code> followed by timer output</td><td>The program executed on a machine without the MCX bank registers. This validates cassette execution and timer behavior, not MCX banking.</td></tr>
+      </table>
+    </section>
+    <footer class="wiki-footer"><p>For the executable layout and timing interpretation, see <a href="../../docs/timer-compare-test.md">the timer-compare procedure</a>.</p></footer>
+  </main>
+</div>
+</body>
+</html>

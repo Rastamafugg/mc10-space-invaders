@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emulator Workflows · Space Invaders MC-10</title>
+  <link rel="stylesheet" href="../shared/css/wiki.css">
+</head>
+<body>
+<div class="wiki-shell">
+  <nav class="wiki-nav"><a href="../index.html">← Wiki home</a><a href="index.html">Internal</a></nav>
+  <main>
+    <header class="wiki-header">
+      <p class="wiki-eyebrow">Internal · tooling</p>
+      <h1>Emulator Workflows and Tool Lessons <span class="wiki-badge">internal</span></h1>
+      <p class="wiki-meta">Persistent operating notes from XRoar, WSLg, MAME, PowerShell, and computer-use testing.</p>
+    </header>
+    <section>
+      <h2>Tool roles</h2>
+      <table>
+        <tr><th>Tool</th><th>Use</th><th>Limit</th></tr>
+        <tr><td>XRoar</td><td>Interactive MC-10 and MCX-128 cassette testing; WSLg X11 screenshots.</td><td>MC-10 support is unfinished. MCX BASIC menu selection and cassette autorun can require manual input.</td></tr>
+        <tr><td>MAME 0.289</td><td>Independent MC-10 driver, direct <code>.c10</code> loading, MCX-128 slot, Lua automation.</td><td>The default MC-10 RAM model is a flat CPU/VDG RAM device, not a physical internal-RAM plus external-bus model.</td></tr>
+        <tr><td>PowerShell</td><td>Build launcher, Windows process control, and MAME invocation.</td><td>Argument quoting and control characters must be checked independently of the emulator.</td></tr>
+        <tr><td>Computer use</td><td>Interactive display and keyboard control when the application is exposed to the CU surface.</td><td>The current runtime may report no native apps even while a Windows emulator window exists.</td></tr>
+      </table>
+    </section>
+    <section>
+      <h2>Confirmed command-injection lesson</h2>
+      <p>MAME's <code>-autoboot_command</code> requires a real Return character to submit a BASIC command. Passing the literal characters <code>\n</code> does not submit Return. In PowerShell, an actual line ending is represented by a double-quoted string such as <code>"CLOADM`n"</code>; single-quoted <code>'CLOADM\n'</code> passes the backslash and letter <code>n</code> literally.</p>
+      <p>For repeatable tests, the project now avoids this fragile boundary. <code>scripts/mame-cassette-autoplay.lua</code> uses MAME's natural keyboard API:</p>
+      <pre><code>keyboard.in_use = true
+keyboard:post_coded("CLOADM{ENTER}")
+keyboard:post_coded("EXEC{ENTER}")</code></pre>
+      <p>The brace code <code>{ENTER}</code> is interpreted by MAME as the emulated Return key. It is not the same as the text sequence <code>\n</code>.</p>
+    </section>
+    <section>
+      <h2>Cassette-control lesson</h2>
+      <p>The MC-10 cassette interface does not provide a remote motor-control line. Loading therefore has three separate actions: enter <code>CLOADM</code>, start cassette playback, and enter <code>EXEC</code> after the transfer returns to BASIC. Starting playback before the loader is searching consumes the tape before the machine is ready.</p>
+      <p>The MAME Lua helper posts <code>CLOADM{ENTER}</code>, waits four seconds, calls <code>cassette:play()</code>, waits for the conservative transfer interval, posts <code>EXEC{ENTER}</code>, and captures the screen. The frame notifier subscription is retained globally because a local subscription can be garbage-collected after the autoboot script returns.</p>
+    </section>
+    <section>
+      <h2>WSLg and CU lesson</h2>
+      <p>WSLg X11 windows can be inspected with X11 tools such as <code>xwininfo</code> and the repository capture utility, but that does not guarantee exposure through computer use. A native MAME window was observed with a valid Windows process, title, and responsive state while the CU inventory still returned <code>apps: []</code>. This is an integration limitation of the active CU surface, not evidence that MAME failed to create a window.</p>
+      <p>Use emulator-owned screenshots for native MAME. Use the X11 capture path for WSLg XRoar. Do not infer display state from process existence alone.</p>
+    </section>
+    <section>
+      <h2>Source references</h2>
+      <ul>
+        <li><a href="https://github.com/mamedev/mame/releases">Official MAME releases</a></li>
+        <li><a href="https://docs.mamedev.org/commandline/commandline-all.html">MAME command-line reference</a></li>
+        <li><a href="https://docs.mamedev.org/luascript/ref-input.html">MAME Lua natural keyboard reference</a></li>
+        <li><a href="https://docs.mamedev.org/luascript/ref-devices.html">MAME Lua cassette and screen reference</a></li>
+      </ul>
+    </section>
+    <footer class="wiki-footer"><p>Detailed MC-10 procedures remain in <a href="../../docs/timer-compare-test.md">docs/timer-compare-test.md</a> and <a href="../../docs/research.md">docs/research.md</a>.</p></footer>
+  </main>
+</div>
+</body>
+</html>
