@@ -40,6 +40,8 @@ analyzer.
 | `W` / `S` | Decrease or increase signed phase by eight E clocks |
 | `R` | Re-arm the next compare from the current counter |
 | `Space` | Reset the event counter and marker |
+| `M` | Cycle alpha, raster-drift, and phase-sweep modes |
+| `P` | Pause or resume the phase sweep while in mode 2 |
 
 Build and launch it on a stock XRoar MC-10 with:
 
@@ -61,6 +63,41 @@ calibrator's defaults are the named constants
 The calibrator is useful on real hardware and for verifying timer control in
 XRoar. XRoar does not expose its emulated `FS` edge as an MC-10 input, so an
 XRoar-only run cannot prove absolute FS phase.
+
+### Visual witnesses
+
+Press `M` once to select raster-drift mode. The display changes to MC6847 CG3
+with the GYBR palette, a blue background, and a green 16x8 pixel rectangle.
+The rectangle moves four pixels per compare and wraps at the right edge. The
+screen write is performed in the foreground after each timer event, while the
+P2.0 marker continues to toggle in the interrupt handler. With a period close
+to one field, the update boundary repeats at nearly the same raster position.
+With a period error, the boundary walks through the raster and the rectangle
+can show a beat or tear. `A` and `D` make this period error deliberately
+larger or smaller.
+
+Press `M` again to select phase-sweep mode. The program starts at approximately
+minus half a field, advances the compare phase by 64 E clocks every eight
+compare events, reaches plus half a field, and then reverses. The red witness
+rectangle moves vertically as the candidate phase changes. Press `P` to hold
+the current candidate while inspecting the display, and press `M` to return to
+the alpha panel and read the exact `PHASE` value. Press `P` again after
+returning to mode 2 to resume the scan.
+
+The sweep is an operator-guided search. The MC-10 has no CPU-readable FS input,
+video sampling path, or tear detector, so software cannot calculate a numeric
+tear minimum. The useful result is the phase value at which the operator sees
+the least disruption. For an objective phase measurement, use the P2.0 marker
+and the physical MC6847 FS signal on a two-channel oscilloscope or logic
+analyzer. XRoar can verify the mode transitions and screen writes, but its
+display output should not be treated as a physical composite-tear measurement.
+
+The visual surface is initialized with interrupts disabled. Each subsequent
+CG3 update erases the old rectangle, draws the new one, and restores the
+RAM-resident output-compare vector at `$4206-$4208`, which overlaps the CG3
+screen surface. The test therefore remains usable even when the sweep visits
+that scanline, but it is not a hardware page flip or a vertical-blank
+interrupt.
 
 ## MC6803 setup
 

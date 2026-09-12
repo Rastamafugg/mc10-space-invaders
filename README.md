@@ -44,7 +44,11 @@ The live field-timing calibrator is also separate:
 
 It displays the compare period, signed phase, and event count, and toggles
 P2.0 for external comparison with MC6847 FS. It does not require an MCX-128
-ROM. See [the calibrator procedure](docs/timer-compare-test.md#live-timing-calibrator).
+ROM. Press `M` to cycle the readable alpha panel, the CG3 raster-drift
+rectangle, and the CG3 phase sweep. In phase-sweep mode, `P` pauses or resumes
+the candidate scan so the operator can inspect the least-disrupted phase.
+See [the calibrator procedure](docs/timer-compare-test.md#live-timing-calibrator)
+and its [visual-witness section](docs/timer-compare-test.md#visual-witnesses).
 
 The build emits:
 

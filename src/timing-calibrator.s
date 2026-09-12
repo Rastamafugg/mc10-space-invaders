@@ -1,10 +1,19 @@
 ; MC-10 field-timing calibrator.
 ;
-; This is an external-instrument helper. The stock MC-10 does not expose the
-; MC6847 FS signal to the CPU, so the program cannot decide which phase is
-; correct by itself. It emits a P2.0 marker at every MC6803 output compare;
-; use that marker and the MC6847 FS pin on a two-channel scope or logic
-; analyzer, then adjust the period and phase while this program runs.
+; The stock MC-10 does not expose the MC6847 FS signal to the CPU, so this
+; program cannot decide which phase produces the smallest visible tear by
+; itself. It emits a P2.0 marker at every MC6803 output compare for external
+; measurement, and provides two visual witnesses:
+;
+;   M mode 1: a CG3 rectangle advances once per compare. A period error makes
+;             the update phase drift relative to the display raster.
+;   M mode 2: the compare phase is swept across one field while a rectangle
+;             moves through the display. P pauses and resumes the sweep so the
+;             operator can inspect the least-disrupted phase.
+;
+; The visual modes are deliberately diagnostic, not a claim that the program
+; has read FS. Use P2.0 and MC6847 FS as the two channels of a scope or logic
+; analyzer when an absolute phase measurement is required.
 
         NAM     MC10-FS-CALIBRATOR
         CPU     6803
@@ -12,15 +21,28 @@
 
 SCREEN          EQU     $4000
 VIDEO_MODE      EQU     $BFFF
+CG3_GYBR        EQU     $24
 TIMER_CSR       EQU     $0008
 TIMER_COUNTER   EQU     $0009
 TIMER_COMPARE   EQU     $000B
 TIMER_DDR2      EQU     $0001
-TIMER_PORT2    EQU      $0003
+TIMER_PORT2     EQU     $0003
 TIMER_OCF_VECTOR EQU    $4206
 KEYBOARD_ROWS   EQU     $BFFF
 CAL_DEFAULT_PERIOD EQU  $3A56
 CAL_DEFAULT_PHASE  EQU  $0000
+BACKGROUND_BYTE EQU     $AA             ; CG3 GYBR blue, two bits 10
+
+; CG3 visual witness geometry. All X coordinates are multiples of four so a
+; rectangle is written as complete packed CG3 bytes.
+CAL_RECT_BYTES  EQU     $04             ; 16 pixels
+CAL_RECT_HEIGHT EQU     $08
+CAL_RECT_SKIP   EQU     $001C           ; 32-byte line minus four bytes
+CAL_DRIFT_STEP  EQU     $04
+CAL_SWEEP_STEP  EQU     $0040
+CAL_SWEEP_HOLD_FRAMES EQU $08
+CAL_SWEEP_START EQU     $E2D5           ; -$1D2B, half a modeled field
+CAL_SWEEP_END   EQU     $1D2B
 
 ; Direct-page state. The stack remains below $00DF.
 CAL_PERIOD_H    EQU     $00E0
@@ -30,7 +52,7 @@ CAL_PHASE_L     EQU     $00E3
 CAL_EVENTS_H    EQU     $00E4
 CAL_EVENTS_L    EQU     $00E5
 CAL_MARKER      EQU     $00E6
-CAL_KEY_LATCH   EQU     $00E7
+CAL_KEY_LATCH   EQU     $00E7       ; A,D,W,S,R,Space,M,P edge latches
 CAL_DIRTY       EQU     $00E8
 CAL_TEMP        EQU     $00E9
 CAL_TEMP2       EQU     $00EA
@@ -40,30 +62,22 @@ CAL_SCREEN_H    EQU     $00ED
 CAL_SCREEN_L    EQU     $00EE
 CAL_VALUE_H     EQU     $00EF
 CAL_VALUE_L     EQU     $00F0
+CAL_MODE        EQU     $00F1       ; 0=alpha, 1=drift, 2=phase sweep
+CAL_RECT_X      EQU     $00F2
+CAL_RECT_Y      EQU     $00F3
+CAL_RECT_OLD_X  EQU     $00F4
+CAL_RECT_OLD_Y  EQU     $00F5
+CAL_RECT_BYTE   EQU     $00F6
+CAL_SWEEP_ACTIVE EQU    $00F7
+CAL_SWEEP_HOLD  EQU     $00F8
+CAL_SWEEP_DIR   EQU     $00F9       ; 1=phase increasing, 0=decreasing
+CAL_SWEEP_Y     EQU     $00FA
 
         *       = $5000
 
 start = *
         SEI
         LDS     #$00DF
-        CLRA
-        STAA    VIDEO_MODE
-
-        ; Clear the 32x16 alpha screen.
-        LDX     #SCREEN
-        LDAA    #$20
-        LDAB    #$00
-cal_clear_first = *
-        STAA    0,X
-        INX
-        INCB
-        BNE     cal_clear_first
-        LDAB    #$00
-cal_clear_second = *
-        STAA    0,X
-        INX
-        INCB
-        BNE     cal_clear_second
 
         LDD     #CAL_DEFAULT_PERIOD
         STD     CAL_PERIOD_H
@@ -75,21 +89,15 @@ cal_clear_second = *
         STAA    CAL_MARKER
         STAA    CAL_KEY_LATCH
         STAA    CAL_DIRTY
+        STAA    CAL_MODE
+        STAA    CAL_SWEEP_ACTIVE
 
-        ; Claim the RAM-resident output-compare vector.
-        LDAA    #$7E
-        STAA    TIMER_OCF_VECTOR
-        LDX     #cal_timer_isr
-        STX     TIMER_OCF_VECTOR+1
-
-        LDAA    #$01
-        STAA    TIMER_DDR2
-        CLRA
-        STAA    TIMER_PORT2
-
-        JSR     cal_write_static
-        JSR     cal_update_display
-        JSR     cal_rearm
+        ; Alpha mode is the readable default. The vector is installed only
+        ; after the screen initialization because the vector lives in screen
+        ; RAM at $4206-$4208.
+        JSR     cal_alpha_initialize
+        JSR     cal_install_vector
+        JSR     cal_rearm_locked
         CLI
 
 cal_main_loop = *
@@ -105,6 +113,11 @@ cal_main_loop = *
 ; phase. Subsequent ISR compares are chained from the previous compare.
 cal_rearm = *
         SEI
+        JSR     cal_rearm_locked
+        CLI
+        RTS
+
+cal_rearm_locked = *
         LDAA    TIMER_CSR
         LDD     TIMER_COUNTER
         ADDD    CAL_PERIOD_H
@@ -112,10 +125,17 @@ cal_rearm = *
         STD     TIMER_COMPARE
         LDAA    #$08
         STAA    TIMER_CSR
-        CLI
         RTS
 
-; One short output-compare handler. P2.0 is the external marker.
+cal_install_vector = *
+        LDAA    #$7E
+        STAA    TIMER_OCF_VECTOR
+        LDX     #cal_timer_isr
+        STX     TIMER_OCF_VECTOR+1
+        RTS
+
+; One short output-compare handler. P2.0 is the external marker. The
+; foreground loop performs all screen writes and phase-sweep work.
 cal_timer_isr = *
         LDAA    TIMER_CSR
         LDD     TIMER_COMPARE
@@ -134,7 +154,8 @@ cal_timer_done = *
         RTI
 
 ; A/D changes period by one E clock. W/S changes phase by eight E clocks.
-; R re-arms from the current counter. Keys are edge-triggered; release a key
+; R re-arms from the current counter. M cycles display modes. P pauses or
+; resumes the phase sweep in mode 2. Keys are edge-triggered; release a key
 ; before the next adjustment.
 cal_keyboard = *
         LDAA    #$FF
@@ -246,7 +267,7 @@ cal_key_space = *
         BNE     cal_key_space_up
         LDAA    CAL_KEY_LATCH
         BITA    #$20
-        BNE     cal_keyboard_done
+        BNE     cal_key_m
         ORAA    #$20
         STAA    CAL_KEY_LATCH
         SEI
@@ -258,10 +279,52 @@ cal_key_space = *
         CLI
         LDAA    #$01
         STAA    CAL_DIRTY
-        BRA     cal_keyboard_done
+        BRA     cal_key_m
 cal_key_space_up = *
         LDAA    CAL_KEY_LATCH
         ANDA    #$DF
+        STAA    CAL_KEY_LATCH
+cal_key_m = *
+        LDAA    #$DF                    ; M: PB5/PA1
+        STAA    $0002
+        LDAA    KEYBOARD_ROWS
+        BITA    #$02
+        BNE     cal_key_m_up
+        LDAA    CAL_KEY_LATCH
+        BITA    #$40
+        BNE     cal_key_p
+        ORAA    #$40
+        STAA    CAL_KEY_LATCH
+        JSR     cal_mode_cycle
+        BRA     cal_key_p
+cal_key_m_up = *
+        LDAA    CAL_KEY_LATCH
+        ANDA    #$BF
+        STAA    CAL_KEY_LATCH
+cal_key_p = *
+        LDAA    #$FE                    ; P: PB0/PA2
+        STAA    $0002
+        LDAA    KEYBOARD_ROWS
+        BITA    #$04
+        BNE     cal_key_p_up
+        LDAA    CAL_KEY_LATCH
+        BITA    #$80
+        BNE     cal_keyboard_done
+        ORAA    #$80
+        STAA    CAL_KEY_LATCH
+        LDAA    CAL_MODE
+        CMPA    #$02
+        BNE     cal_key_p_done
+        LDAA    CAL_SWEEP_ACTIVE
+        EORA    #$01
+        STAA    CAL_SWEEP_ACTIVE
+        LDAA    #$01
+        STAA    CAL_DIRTY
+cal_key_p_done = *
+        BRA     cal_keyboard_done
+cal_key_p_up = *
+        LDAA    CAL_KEY_LATCH
+        ANDA    #$7F
         STAA    CAL_KEY_LATCH
 cal_keyboard_done = *
         LDAA    #$FF
@@ -274,63 +337,171 @@ cal_adjusted = *
         JSR     cal_rearm
         RTS
 
-; Static explanatory text. MC-10 alpha codes use A=1..Z=$1A, digits $30..$39.
-cal_write_static = *
-        LDX     #cal_title
-        LDAA    #$00
-        LDAB    #$14
-        JSR     cal_write_line
-        LDX     #cal_period_text
-        LDAA    #$02
-        LDAB    #$08
-        JSR     cal_write_line
-        LDX     #cal_phase_text
-        LDAA    #$03
-        LDAB    #$08
-        JSR     cal_write_line
-        LDX     #cal_events_text
-        LDAA    #$04
-        LDAB    #$08
-        JSR     cal_write_line
-        LDX     #cal_controls_1
-        LDAA    #$06
-        LDAB    #$16
-        JSR     cal_write_line
-        LDX     #cal_controls_2
-        LDAA    #$07
-        LDAB    #$14
-        JSR     cal_write_line
+; Cycle alpha -> drift -> phase sweep -> alpha. The screen initialization is
+; performed with interrupts disabled because CG3 writes can overlap $4206-$4208.
+cal_mode_cycle = *
+        SEI
+        LDAA    CAL_MODE
+        INCA
+        CMPA    #$03
+        BCS     cal_mode_store
+        CLRA
+cal_mode_store = *
+        STAA    CAL_MODE
+        CLRA
+        STAA    CAL_EVENTS_H
+        STAA    CAL_EVENTS_L
+        STAA    CAL_MARKER
+        STAA    TIMER_PORT2
+        LDAA    CAL_MODE
+        BEQ     cal_mode_alpha_screen
+        JSR     cal_visual_initialize
+        BRA     cal_mode_finish
+cal_mode_alpha_screen = *
+        JSR     cal_alpha_initialize
+cal_mode_finish = *
+        JSR     cal_install_vector
+        JSR     cal_rearm_locked
+        LDAA    #$01
+        STAA    CAL_DIRTY
+        CLI
         RTS
 
-; Write X text bytes to alpha row A, B bytes long.
-cal_write_line = *
-        STX     CAL_TEXT_H
-        STAB    CAL_TEMP2
-        ASLA
-        TAB
-        LDX     #cal_row_ptrs
-        ABX
-        LDD     0,X
-        STD     CAL_SCREEN_H
-        LDX     CAL_TEXT_H
-        LDAB    CAL_TEMP2
-cal_write_line_loop = *
-        LDX     CAL_TEXT_H
-        LDAA    0,X
-        INX
-        STX     CAL_TEXT_H
-        LDX     CAL_SCREEN_H
+; Initialize the 32x16 alpha screen and redraw the readable control panel.
+cal_alpha_initialize = *
+        CLRA
+        STAA    VIDEO_MODE
+        LDX     #SCREEN
+        LDAA    #$20
+        LDAB    #$00
+cal_clear_alpha_first = *
         STAA    0,X
         INX
-        STX     CAL_SCREEN_H
-        LDAB    CAL_TEMP2
-        DECB
-        STAB    CAL_TEMP2
-        BNE     cal_write_line_loop
+        INCB
+        BNE     cal_clear_alpha_first
+        LDAB    #$00
+cal_clear_alpha_second = *
+        STAA    0,X
+        INX
+        INCB
+        BNE     cal_clear_alpha_second
+        CLRA
+        STAA    CAL_SWEEP_ACTIVE
+        JSR     cal_write_static
+        JSR     cal_update_alpha
         RTS
 
-; Refresh the three four-digit hexadecimal values.
+; Initialize a blue CG3 surface and the current visual witness.
+cal_visual_initialize = *
+        LDAA    #CG3_GYBR
+        STAA    VIDEO_MODE
+        JSR     cal_clear_cg3
+        LDAA    CAL_MODE
+        CMPA    #$02
+        BEQ     cal_visual_sweep_init
+
+        LDAA    #$08
+        STAA    CAL_RECT_X
+        STAA    CAL_RECT_OLD_X
+        LDAA    #$2C                    ; center-height drift marker
+        STAA    CAL_RECT_Y
+        STAA    CAL_RECT_OLD_Y
+        CLRA                            ; CG3 green
+        STAA    CAL_RECT_BYTE
+        CLRA
+        STAA    CAL_SWEEP_ACTIVE
+        JSR     cal_draw_rect
+        RTS
+
+cal_visual_sweep_init = *
+        LDD     #CAL_SWEEP_START
+        STD     CAL_PHASE_H
+        LDAA    #$01
+        STAA    CAL_SWEEP_ACTIVE
+        STAA    CAL_SWEEP_DIR
+        LDAA    #CAL_SWEEP_HOLD_FRAMES
+        STAA    CAL_SWEEP_HOLD
+        LDAA    #$08
+        STAA    CAL_SWEEP_Y
+        LDAA    #$38                    ; fixed center X
+        STAA    CAL_RECT_X
+        STAA    CAL_RECT_OLD_X
+        LDAA    CAL_SWEEP_Y
+        STAA    CAL_RECT_Y
+        STAA    CAL_RECT_OLD_Y
+        LDAA    #$FF                    ; CG3 red
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_rect
+        RTS
+
+cal_clear_cg3 = *
+        LDX     #SCREEN
+        LDAA    #BACKGROUND_BYTE
+        LDAB    #$00
+cal_clear_cg3_page = *
+        STAA    0,X
+        INX
+        INCB
+        BNE     cal_clear_cg3_page
+        LDAA    #$0C
+        STAA    CAL_TEMP
+cal_clear_cg3_pages = *
+        LDAA    #BACKGROUND_BYTE
+        LDAB    #$00
+cal_clear_cg3_page_again = *
+        STAA    0,X
+        INX
+        INCB
+        BNE     cal_clear_cg3_page_again
+        DEC     CAL_TEMP
+        BNE     cal_clear_cg3_pages
+        RTS
+
+; Draw a solid 16x8 packed-CG3 rectangle at CAL_RECT_X/CAL_RECT_Y.
+; This routine uses the foreground-only CAL_TEMP loop byte.
+cal_draw_rect = *
+        LDAA    CAL_RECT_Y
+        LDAB    #$20
+        MUL
+        ADDD    #SCREEN
+        STD     CAL_SCREEN_H
+        LDAA    CAL_RECT_X
+        LSRA
+        LSRA
+        TAB
+        CLRA
+        LDX     CAL_SCREEN_H
+        ABX
+        STX     CAL_SCREEN_H
+        LDAA    #CAL_RECT_HEIGHT
+        STAA    CAL_TEMP
+cal_draw_rect_row = *
+        LDX     CAL_SCREEN_H
+        LDAA    CAL_RECT_BYTE
+        LDAB    #CAL_RECT_BYTES
+cal_draw_rect_bytes = *
+        STAA    0,X
+        INX
+        DECB
+        BNE     cal_draw_rect_bytes
+        STX     CAL_SCREEN_H
+        LDD     CAL_SCREEN_H
+        ADDD    #CAL_RECT_SKIP
+        STD     CAL_SCREEN_H
+        DEC     CAL_TEMP
+        BNE     cal_draw_rect_row
+        RTS
+
+; Alpha display updates remain separate from visual witness updates.
 cal_update_display = *
+        LDAA    CAL_MODE
+        BEQ     cal_update_alpha
+        JSR     cal_update_visual
+        RTS
+
+cal_update_alpha = *
+        JSR     cal_update_mode
+        JSR     cal_update_sweep_status
         LDD     CAL_PERIOD_H
         LDX     #SCREEN+$48
         STX     CAL_SCREEN_H
@@ -345,6 +516,238 @@ cal_update_display = *
         JSR     cal_write_word
         RTS
 
+; Process one compare event in a visual mode. The vector is restored after
+; every CG3 update because it occupies visible CG3 RAM at $4206-$4208.
+cal_update_visual = *
+        SEI
+        LDAA    CAL_MODE
+        CMPA    #$01
+        BEQ     cal_update_drift
+        JSR     cal_sweep_tick
+        BRA     cal_update_visual_done
+cal_update_drift = *
+        JSR     cal_drift_tick
+cal_update_visual_done = *
+        JSR     cal_install_vector
+        CLI
+        RTS
+
+; Move the green marker one packed-pixel column per compare. The old marker
+; is erased before the new position is drawn. A period mismatch causes this
+; update boundary to walk through the continuously refreshed raster.
+cal_drift_tick = *
+        LDAA    CAL_RECT_X
+        STAA    CAL_RECT_OLD_X
+        LDAA    CAL_RECT_Y
+        STAA    CAL_RECT_OLD_Y
+        LDAA    #BACKGROUND_BYTE
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_rect
+
+        LDAA    CAL_RECT_OLD_X
+        ADDA    #CAL_DRIFT_STEP
+        CMPA    #$70                    ; 112 + 16 reaches the right edge
+        BCS     cal_drift_store_x
+        LDAA    #$08
+cal_drift_store_x = *
+        STAA    CAL_RECT_X
+        LDAA    #$00                    ; CG3 green
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_rect
+        LDAA    CAL_RECT_X
+        STAA    CAL_RECT_OLD_X
+        LDAA    CAL_RECT_Y
+        STAA    CAL_RECT_OLD_Y
+        RTS
+
+; Sweep phase candidates over approximately one modeled field. The timer
+; compare is re-anchored at each candidate so the visible rectangle tests both
+; the candidate phase and the update boundary. The program can scan but cannot
+; measure visible tear, so P pauses the current candidate for inspection.
+cal_sweep_tick = *
+        LDAA    CAL_RECT_X
+        STAA    CAL_RECT_OLD_X
+        LDAA    CAL_RECT_Y
+        STAA    CAL_RECT_OLD_Y
+        LDAA    #BACKGROUND_BYTE
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_rect
+
+        LDAA    CAL_SWEEP_ACTIVE
+        BNE     cal_sweep_active_near
+        JMP     cal_sweep_draw
+cal_sweep_active_near = *
+        JMP     cal_sweep_active_body
+cal_sweep_active_body = *
+        DEC     CAL_SWEEP_HOLD
+        BNE     cal_sweep_draw
+        LDAA    #CAL_SWEEP_HOLD_FRAMES
+        STAA    CAL_SWEEP_HOLD
+        LDAA    CAL_SWEEP_DIR
+        BEQ     cal_sweep_decrease
+
+        LDD     CAL_PHASE_H
+        ADDD    #CAL_SWEEP_STEP
+        STD     CAL_PHASE_H
+        LDAA    CAL_PHASE_H
+        CMPA    #$1D
+        BCS     cal_sweep_increase_y
+        BNE     cal_sweep_high_end
+        LDAA    CAL_PHASE_L
+        CMPA    #$2B
+        BCS     cal_sweep_increase_y
+cal_sweep_high_end = *
+        LDD     #CAL_SWEEP_END
+        STD     CAL_PHASE_H
+        CLRA
+        STAA    CAL_SWEEP_DIR
+        LDAA    #$50
+        STAA    CAL_SWEEP_Y
+        JSR     cal_rearm_locked
+        BRA     cal_sweep_draw
+
+cal_sweep_increase_y = *
+        LDAA    CAL_SWEEP_Y
+        ADDA    #$04
+        CMPA    #$50
+        BCS     cal_sweep_store_y_up
+        LDAA    #$50
+cal_sweep_store_y_up = *
+        STAA    CAL_SWEEP_Y
+        JSR     cal_rearm_locked
+        BRA     cal_sweep_draw
+
+cal_sweep_decrease = *
+        LDD     CAL_PHASE_H
+        SUBD    #CAL_SWEEP_STEP
+        STD     CAL_PHASE_H
+        LDAA    CAL_PHASE_H
+        CMPA    #$E2
+        BCS     cal_sweep_low_end
+        BNE     cal_sweep_decrease_y
+        LDAA    CAL_PHASE_L
+        CMPA    #$D5
+        BCS     cal_sweep_low_end
+        BNE     cal_sweep_decrease_y
+cal_sweep_low_end = *
+        LDD     #CAL_SWEEP_START
+        STD     CAL_PHASE_H
+        LDAA    #$01
+        STAA    CAL_SWEEP_DIR
+        LDAA    #$08
+        STAA    CAL_SWEEP_Y
+        JSR     cal_rearm_locked
+        BRA     cal_sweep_draw
+
+cal_sweep_decrease_y = *
+        LDAA    CAL_SWEEP_Y
+        SUBA    #$04
+        CMPA    #$08
+        BCS     cal_sweep_store_y_down
+        BEQ     cal_sweep_store_y_down
+        BRA     cal_sweep_rearm
+cal_sweep_store_y_down = *
+        LDAA    #$08
+        STAA    CAL_SWEEP_Y
+cal_sweep_rearm = *
+        JSR     cal_rearm_locked
+
+cal_sweep_draw = *
+        LDAA    CAL_SWEEP_Y
+        STAA    CAL_RECT_Y
+        LDAA    #$FF                    ; CG3 red
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_rect
+        LDAA    CAL_RECT_X
+        STAA    CAL_RECT_OLD_X
+        LDAA    CAL_RECT_Y
+        STAA    CAL_RECT_OLD_Y
+        RTS
+
+; Static explanatory text. MC-10 alpha codes use A=1..Z=$1A, digits $30..$39.
+cal_write_static = *
+        LDX     #cal_title
+        LDAA    #$00
+        LDAB    #$14
+        JSR     cal_write_line
+        LDX     #cal_sweep_help
+        LDAA    #$05
+        LDAB    #$0F
+        JSR     cal_write_line
+        LDX     #cal_controls_1
+        LDAA    #$06
+        LDAB    #$16
+        JSR     cal_write_line
+        LDX     #cal_controls_2
+        LDAA    #$07
+        LDAB    #$14
+        JSR     cal_write_line
+        RTS
+
+cal_update_mode = *
+        LDAA    CAL_MODE
+        BEQ     cal_mode_alpha_text
+        CMPA    #$01
+        BEQ     cal_mode_drift_text
+        LDX     #cal_mode_sweep
+        BRA     cal_mode_write
+cal_mode_alpha_text = *
+        LDX     #cal_mode_alpha_label
+        BRA     cal_mode_write
+cal_mode_drift_text = *
+        LDX     #cal_mode_drift
+cal_mode_write = *
+        LDAA    #$01
+        LDAB    #$0B
+        JSR     cal_write_line
+        RTS
+
+cal_update_sweep_status = *
+        LDAA    CAL_MODE
+        CMPA    #$02
+        BNE     cal_sweep_status_help
+        LDAA    CAL_SWEEP_ACTIVE
+        BEQ     cal_sweep_status_stop
+        LDX     #cal_sweep_run
+        BRA     cal_sweep_status_write
+cal_sweep_status_stop = *
+        LDX     #cal_sweep_stop
+        BRA     cal_sweep_status_write
+cal_sweep_status_help = *
+        LDX     #cal_sweep_help
+cal_sweep_status_write = *
+        LDAA    #$05
+        LDAB    #$0F
+        JSR     cal_write_line
+        RTS
+
+; Write X text bytes to alpha row A, B bytes long.
+cal_write_line = *
+        STX     CAL_TEXT_H
+        STAB    CAL_TEMP2
+        ASLA
+        TAB
+        LDX     #cal_row_ptrs
+        ABX
+        LDD     0,X
+        STD     CAL_SCREEN_H
+        LDX     CAL_TEXT_H
+cal_write_line_loop = *
+        LDAA    0,X
+        INX
+        STX     CAL_TEXT_H
+        LDX     CAL_SCREEN_H
+        STAA    0,X
+        INX
+        STX     CAL_SCREEN_H
+        LDX     CAL_TEXT_H
+        LDAB    CAL_TEMP2
+        DECB
+        STAB    CAL_TEMP2
+        BNE     cal_write_line_loop
+        RTS
+
+; Refresh a four-digit hexadecimal value.
 cal_write_word = *
         STD     CAL_VALUE_H
         LDAA    CAL_VALUE_H
@@ -388,12 +791,18 @@ cal_write_char = *
 
 cal_title = *
         DB      $06,$13,$20,$14,$09,$0D,$09,$0E,$07,$20,$03,$01,$0C,$09,$02,$12,$01,$14,$0F,$12
-cal_period_text = *
-        DB      $10,$05,$12,$09,$0F,$04,$3A,$20
-cal_phase_text = *
-        DB      $10,$08,$01,$13,$05,$3A,$20,$20
-cal_events_text = *
-        DB      $05,$16,$05,$0E,$14,$13,$3A,$20
+cal_mode_alpha_label = *
+        DB      $0D,$0F,$04,$05,$3A,$20,$01,$0C,$10,$08,$01
+cal_mode_drift = *
+        DB      $0D,$0F,$04,$05,$3A,$20,$04,$12,$09,$06,$14
+cal_mode_sweep = *
+        DB      $0D,$0F,$04,$05,$3A,$20,$13,$17,$05,$05,$10
+cal_sweep_help = *
+        DB      $0D,$20,$03,$19,$03,$0C,$05,$20,$10,$20,$13,$17,$05,$05,$10
+cal_sweep_run = *
+        DB      $13,$17,$05,$05,$10,$3A,$20,$12,$15,$0E,$20,$20,$20,$20,$20
+cal_sweep_stop = *
+        DB      $13,$17,$05,$05,$10,$3A,$20,$13,$14,$0F,$10,$20,$20,$20,$20
 cal_controls_1 = *
         DB      $01,$2F,$04,$20,$10,$05,$12,$09,$0F,$04,$20,$20,$17,$2F,$13,$20,$10,$08,$01,$13,$05,$20
 cal_controls_2 = *
