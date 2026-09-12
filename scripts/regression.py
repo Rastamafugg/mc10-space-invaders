@@ -97,11 +97,13 @@ def parse_map(path: Path) -> dict[str, int]:
     return values
 
 
-def check_artifacts(root: Path, build_dir: Path) -> None:
-    binary = build_dir / "space-invaders.bin"
-    cassette = build_dir / "space-invaders.c10"
-    map_file = build_dir / "space-invaders.map"
-    source = root / "src" / "main.s"
+def check_program_artifacts(
+    root: Path, build_dir: Path, prefix: str, source_name: str
+) -> dict[str, int]:
+    binary = build_dir / f"{prefix}.bin"
+    cassette = build_dir / f"{prefix}.c10"
+    map_file = build_dir / f"{prefix}.map"
+    source = root / "src" / source_name
     for path in (binary, cassette, map_file, source):
         if not path.is_file():
             fail(f"missing build artifact or source file: {path}")
@@ -126,7 +128,16 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
         cwd=root,
         check=True,
     )
+    return values
 
+
+def check_artifacts(root: Path, build_dir: Path) -> None:
+    utility_values = check_program_artifacts(
+        root, build_dir, "environment-test", "environment-test.s"
+    )
+    game_values = check_program_artifacts(root, build_dir, "space-invaders", "main.s")
+
+    source = root / "src" / "environment-test.s"
     source_text = source.read_text(encoding="ascii")
     required_source_tokens = (
         "MCX_MAP_ALL_RAM",
@@ -151,12 +162,32 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     if missing_signatures:
         fail(f"source is missing MCX bank signatures: {', '.join(missing_signatures)}")
 
+    game_source = root / "src" / "main.s"
+    game_text = game_source.read_text(encoding="ascii")
+    game_tokens = (
+        "CG3_GYBR",
+        "SCREEN_BYTES",
+        "game_draw_formation",
+        "game_draw_shields",
+        "game_damage_shield",
+        "game_alien_shot_update",
+        "game_bonus_update",
+        "GAME_SCORE_0",
+        "GAME_LIVES",
+        "GAME_TICK",
+    )
+    missing_game_tokens = [token for token in game_tokens if token not in game_text]
+    if missing_game_tokens:
+        fail(f"game source is missing regression markers: {', '.join(missing_game_tokens)}")
+
     print(
         "regression: build artifacts pass "
-        f"(load=${values['start']:04X}, {values['size']} bytes)"
+        f"(utility ${utility_values['start']:04X}/{utility_values['size']} bytes, "
+        f"game ${game_values['start']:04X}/{game_values['size']} bytes)"
     )
     print("regression: cassette framing pass")
     print("regression: source covers all eight MCX bank signatures")
+    print("regression: CG3 game layout and gameplay markers present")
 
 
 def command_exists(command: str) -> bool:
@@ -273,7 +304,7 @@ def run_emulator(root: Path, build_dir: Path, xroar: str, rom: Path, timeout: fl
     if not command_exists("python3"):
         fail("WSLg screen check requires python3")
 
-    cassette = build_dir / "space-invaders.c10"
+    cassette = build_dir / "environment-test.c10"
     screenshot = build_dir / "regression-screen.png"
     log_path = build_dir / "regression-xroar.log"
     before = {window.window_id for window in list_xroar_windows()}

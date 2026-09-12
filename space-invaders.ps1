@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('build', 'run', 'test', 'check', 'clean')]
+    [ValidateSet('build', 'run', 'utility', 'utility-run', 'test', 'check', 'clean')]
     [string]$Mode = 'build'
 )
 
@@ -12,13 +12,15 @@ if ($LASTEXITCODE -ne 0 -or -not $linuxRoot) {
     throw 'WSL could not resolve the project directory.'
 }
 
-if ($Mode -eq 'run') {
-    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" build
+if ($Mode -in @('run', 'utility-run')) {
+    $buildTarget = if ($Mode -eq 'utility-run') { 'utility' } else { 'build' }
+    $cassetteName = if ($Mode -eq 'utility-run') { 'environment-test.c10' } else { 'space-invaders.c10' }
+    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" $buildTarget
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
     $emulator = if ($env:MC10_XROAR) { $env:MC10_XROAR } else { '/usr/local/bin/xroar' }
-    $cassette = "$linuxRoot/build/space-invaders.c10"
+    $cassette = "$linuxRoot/build/$cassetteName"
     if ($env:MC10_MCX_DIRECT_ROM -or $env:MC10_MCX_ROM) {
         $emulatorArgs = @('-machine', 'mc10', '-cart', 'mcx128')
         $mcxRom = if ($env:MC10_MCX_DIRECT_ROM) { $env:MC10_MCX_DIRECT_ROM } else { $env:MC10_MCX_ROM }
@@ -66,6 +68,10 @@ if ($Mode -eq 'test') {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" utility
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
 
     $testArgs = @()
     if ($env:MC10_XROAR) {
@@ -94,5 +100,9 @@ if ($Mode -eq 'test') {
     exit $LASTEXITCODE
 }
 
-& wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" $Mode
+if ($Mode -eq 'utility') {
+    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" utility
+} else {
+    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" $Mode
+}
 exit $LASTEXITCODE

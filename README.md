@@ -28,6 +28,13 @@ From PowerShell:
 .\space-invaders.ps1 run
 ```
 
+The diagnostic utility is a separate target:
+
+```powershell
+.\space-invaders.ps1 utility
+.\space-invaders.ps1 utility-run
+```
+
 The build emits:
 
 - `build/space-invaders.bin` — raw MC6803 program.
@@ -150,7 +157,14 @@ python3 scripts/regression.py --skip-emulator
 
 ## Current test program
 
-`src/main.s` initializes the MC-10 alpha video mode, clears the 32×16 screen, writes a title and status line, switches MCX-128 to all-RAM mode, verifies distinct signatures through all eight selectable 16 KiB RAM windows, restores the normal map, runs the MC6803 timer-compare cadence test, and enters the first playable timer-driven game loop. The timer test reports `TIMER: OK` after 60 predicted MC6847 fields and toggles P2.0 for comparison with physical MC6847 FS timing. The game loop scans A/D and Space, moves the player, launches one shot at a time, advances a two-row invader formation, removes hit invaders, updates score and lives, and redraws the playfield. See [the timer-compare procedure](docs/timer-compare-test.md). The rendering uses MC-10 alpha-mode characters as a deterministic first gameplay milestone.
+`src/main.s` is the CG3 game target. It selects 128×96 two-bit graphics with
+the GYBR palette, draws the arcade-style alien formation, preserves damaged
+shields, scans A/D and Space, moves the player, fires one shot at a time,
+advances the formation, launches alien shots, awards score, and displays
+remaining ships at the bottom right. The score is at the bottom left, with no
+status text above the aliens. The prior MCX-128 bank and timer diagnostic is
+retained as `src/environment-test.s` and built with the `utility` target. See
+[the CG3 game layout](docs/cg3-game.md) and [the timer-compare procedure](docs/timer-compare-test.md).
 
 ## Project knowledge
 
