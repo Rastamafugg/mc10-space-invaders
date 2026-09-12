@@ -187,42 +187,42 @@ all_banks_ok = *
         CLRA
         STAA    MCX_BANK
 
-        ; Fixed-width title and status rows. MC-10 alpha screen codes match
-        ; printable ASCII for the uppercase characters used here.
+        ; Fixed-width title and status rows. MC-10 alpha screen codes use
+        ; bits 0-5 for the glyph and bit 6 as the inverse attribute.
         LDX     #SCREEN+32
-        LDAA    #$53
+        LDAA    #$13
         STAA    0,X
-        LDAA    #$50
+        LDAA    #$10
         STAA    1,X
-        LDAA    #$41
+        LDAA    #$01
         STAA    2,X
-        LDAA    #$43
+        LDAA    #$03
         STAA    3,X
-        LDAA    #$45
+        LDAA    #$05
         STAA    4,X
         LDAA    #$20
         STAA    5,X
-        LDAA    #$49
+        LDAA    #$09
         STAA    6,X
-        LDAA    #$4E
+        LDAA    #$0E
         STAA    7,X
-        LDAA    #$56
+        LDAA    #$16
         STAA    8,X
-        LDAA    #$41
+        LDAA    #$01
         STAA    9,X
-        LDAA    #$44
+        LDAA    #$04
         STAA    10,X
-        LDAA    #$45
+        LDAA    #$05
         STAA    11,X
-        LDAA    #$52
+        LDAA    #$12
         STAA    12,X
-        LDAA    #$53
+        LDAA    #$13
         STAA    13,X
 
         LDX     #SCREEN+64
-        LDAA    #$4D
+        LDAA    #$0D
         STAA    0,X
-        LDAA    #$43
+        LDAA    #$03
         STAA    1,X
         LDAA    #$2D
         STAA    2,X
@@ -242,21 +242,21 @@ all_banks_ok = *
         STAA    9,X
         LDAA    #$20
         STAA    10,X
-        LDAA    #$54
+        LDAA    #$14
         STAA    11,X
-        LDAA    #$45
+        LDAA    #$05
         STAA    12,X
-        LDAA    #$53
+        LDAA    #$13
         STAA    13,X
-        LDAA    #$54
+        LDAA    #$14
         STAA    14,X
 
         LDX     #SCREEN+96
-        LDAA    #$4D
+        LDAA    #$0D
         STAA    0,X
-        LDAA    #$43
+        LDAA    #$03
         STAA    1,X
-        LDAA    #$58
+        LDAA    #$18
         STAA    2,X
         LDAA    #$31
         STAA    3,X
@@ -266,33 +266,33 @@ all_banks_ok = *
         STAA    5,X
         LDAA    #$20
         STAA    6,X
-        LDAA    #$52
+        LDAA    #$12
         STAA    7,X
-        LDAA    #$41
+        LDAA    #$01
         STAA    8,X
-        LDAA    #$4D
+        LDAA    #$0D
         STAA    9,X
         LDAA    #$3A
         STAA    10,X
         LDAA    #$20
         STAA    11,X
-        LDAA    #$4F
+        LDAA    #$0F
         STAA    12,X
-        LDAA    #$4B
+        LDAA    #$0B
         STAA    13,X
 
         ; The game-loop scaffold displays a free-running four-digit frame
         ; counter. game_update replaces this with simulation and rendering.
         LDX     #SCREEN+160
-        LDAA    #$46                    ; F
+        LDAA    #$06                    ; F
         STAA    0,X
-        LDAA    #$52                    ; R
+        LDAA    #$12                    ; R
         STAA    1,X
-        LDAA    #$41                    ; A
+        LDAA    #$01                    ; A
         STAA    2,X
-        LDAA    #$4D                    ; M
+        LDAA    #$0D                    ; M
         STAA    3,X
-        LDAA    #$45                    ; E
+        LDAA    #$05                    ; E
         STAA    4,X
         LDAA    #$3A                    ; :
         STAA    5,X
@@ -332,11 +332,11 @@ mcx_failure = *
         CLRA
         STAA    MCX_BANK
         LDX     #SCREEN+96
-        LDAA    #$4D
+        LDAA    #$0D
         STAA    0,X
-        LDAA    #$43
+        LDAA    #$03
         STAA    1,X
-        LDAA    #$58
+        LDAA    #$18
         STAA    2,X
         LDAA    #$31
         STAA    3,X
@@ -346,15 +346,15 @@ mcx_failure = *
         STAA    5,X
         LDAA    #$20
         STAA    6,X
-        LDAA    #$45
+        LDAA    #$05
         STAA    7,X
-        LDAA    #$52
+        LDAA    #$12
         STAA    8,X
-        LDAA    #$52
+        LDAA    #$12
         STAA    9,X
-        LDAA    #$4F
+        LDAA    #$0F
         STAA    10,X
-        LDAA    #$52
+        LDAA    #$12
         STAA    11,X
         LDAA    #$20
         STAA    12,X
@@ -621,8 +621,8 @@ timer_status_store = *
         RTS
 
 timer_wait_text = *
-        DB      $54,$49,$4D,$45,$52,$3A,$20,$57,$41,$49,$54,$20
+        DB      $14,$09,$0D,$05,$12,$3A,$20,$17,$01,$09,$14,$20
 timer_ok_text = *
-        DB      $54,$49,$4D,$45,$52,$3A,$20,$4F,$4B,$20,$20,$20
+        DB      $14,$09,$0D,$05,$12,$3A,$20,$0F,$0B,$20,$20,$20
 timer_fail_text = *
-        DB      $54,$49,$4D,$45,$52,$3A,$20,$46,$41,$49,$4C,$20
+        DB      $14,$09,$0D,$05,$12,$3A,$20,$06,$01,$09,$0C,$20

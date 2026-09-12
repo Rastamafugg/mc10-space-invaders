@@ -123,6 +123,31 @@ auto-keyboard notes](docs/xroar-auto-keyboard.md).
 
 Use `.\space-invaders.ps1 check` to validate tool and source prerequisites without launching the emulator. Use `.\space-invaders.ps1 clean` to remove generated artifacts.
 
+## Automated regression checks
+
+The test command rebuilds the cassette, validates its framing, checks the
+`$5000` load/execute contract, verifies that the source still contains the
+eight MCX bank signatures, and runs the full MCX diagnostic under WSLg. The
+emulator stage captures the XRoar display and requires both `MCX128 RAM: OK`
+and `TIMER: OK`; the first status is the runtime result of all eight 16 KiB
+bank tests, not a static claim about the cartridge.
+
+Set the patched XRoar and emulator-only stock direct ROM paths, then run:
+
+```powershell
+$env:MC10_XROAR = '/mnt/e/projects/mc10-space-invaders/build/xroar-clean/src/xroar'
+$env:MC10_MCX_DIRECT_ROM = 'E:\projects\mc10-space-invaders\build\mcx128-stock-direct.rom'
+.\space-invaders.ps1 test
+```
+
+The last capture is retained as `build/regression-screen.png` and the XRoar
+output as `build/regression-xroar.log` when troubleshooting. On a machine
+without WSLg, run the portable stages with:
+
+```text
+python3 scripts/regression.py --skip-emulator
+```
+
 ## Current test program
 
 `src/main.s` initializes the MC-10 alpha video mode, clears the 32×16 screen, writes a title and status line, switches MCX-128 to all-RAM mode, verifies distinct signatures through all eight selectable 16 KiB RAM windows, restores the normal map, runs the MC6803 timer-compare cadence test, and enters a timer-driven game-loop scaffold. The timer test reports `TIMER: OK` after 60 predicted MC6847 fields and toggles P2.0 for comparison with physical MC6847 FS timing. The scaffold consumes one queued tick per compare and increments a four-digit frame counter. See [the timer-compare procedure](docs/timer-compare-test.md). It is a loader/platform smoke test, not the game implementation.
@@ -131,6 +156,7 @@ Use `.\space-invaders.ps1 check` to validate tool and source prerequisites witho
 
 - [MC-10 platform notes](docs/mc10-platform.md)
 - [Physical MCX-128 register map](docs/mcx128-register-map.md)
+- [MCX-128 cassette-loading fault analysis](docs/mcx-cassette-loading.md)
 - [XRoar MCX BASIC (LARGE) direct boot](docs/mcx-direct-boot.md)
 - [Research and open questions](docs/research.md)
 - [Build workflow](wiki/internal/build-workflow.html)

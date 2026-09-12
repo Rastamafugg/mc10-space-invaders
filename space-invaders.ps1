@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('build', 'run', 'check', 'clean')]
+    [ValidateSet('build', 'run', 'test', 'check', 'clean')]
     [string]$Mode = 'build'
 )
 
@@ -58,6 +58,39 @@ if ($Mode -eq 'run') {
     }
 
     & wsl.exe --cd $linuxRoot --exec $emulator @emulatorArgs
+    exit $LASTEXITCODE
+}
+
+if ($Mode -eq 'test') {
+    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" build
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+
+    $testArgs = @()
+    if ($env:MC10_XROAR) {
+        $testEmulator = $env:MC10_XROAR
+        if ($testEmulator -match '^[A-Za-z]:[\\/]') {
+            $testEmulator = (& wsl.exe --exec wslpath -a -u $testEmulator).Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $testEmulator) {
+                throw 'WSL could not resolve the XRoar path.'
+            }
+        }
+        $testArgs += @('--xroar', $testEmulator)
+    }
+
+    $testRom = if ($env:MC10_MCX_DIRECT_ROM) { $env:MC10_MCX_DIRECT_ROM } else { $env:MC10_MCX_ROM }
+    if ($testRom) {
+        if ($testRom -match '^[A-Za-z]:[\\/]') {
+            $testRom = (& wsl.exe --exec wslpath -a -u $testRom).Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $testRom) {
+                throw 'WSL could not resolve the MCX ROM path.'
+            }
+        }
+        $testArgs += @('--rom', $testRom)
+    }
+
+    & wsl.exe --cd $linuxRoot --exec python3 "$linuxRoot/scripts/regression.py" @testArgs
     exit $LASTEXITCODE
 }
 

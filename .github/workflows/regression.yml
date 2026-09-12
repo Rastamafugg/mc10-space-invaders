@@ -1,0 +1,24 @@
+name: MC-10 regression
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  portable:
+    name: Portable build and cassette checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install assembler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes crasm
+
+      - name: Build cassette
+        run: bash scripts/build.sh build
+
+      - name: Run portable regression checks
+        run: python3 scripts/regression.py --skip-emulator
