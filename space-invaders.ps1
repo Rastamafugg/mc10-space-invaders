@@ -33,10 +33,15 @@ if ($Mode -eq 'run') {
             throw "MC10_MCX_DIRECT_MODE must be 'large' or 'stock'."
         }
         if ($env:MC10_MCX_DIRECT_ROM -and $directMode -eq 'stock') {
-            # Keep the stock BASIC prompt usable. XRoar's auto-keyboard
-            # breakpoint does not reliably detect the host-ROM warm start
-            # when the MCX cartridge is attached.
-            $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette)
+            if ($env:MC10_XROAR_MC10_CART_PATCHED -eq '1') {
+                # The patched XRoar build routes its synthetic RTS stack reads
+                # through the MCX cartridge, so its -run autorun path is safe.
+                $emulatorArgs += @('-cart-rom', $mcxRom, '-run', $cassette)
+            } else {
+                # Keep the stock BASIC prompt usable. An unpatched XRoar
+                # bypasses the MCX cartridge during its auto-keyboard RTS.
+                $emulatorArgs += @('-cart-rom', $mcxRom, '-load-tape', $cassette)
+            }
         } elseif ($env:MC10_MCX_DIRECT_ROM) {
             # MCX BASIC does not accept XRoar's generic CLOADM:EXEC syntax.
             # Queue CLOADM only; the cassette Play control and EXEC remain

@@ -115,10 +115,11 @@ $env:MC10_MCX_DIRECT_MODE = 'stock'
 
 This emulator-only image forces `P0=0`, `P1=0`, and `$BF01=2`, then enters the
 host stock MC-10 ROM at `$F72E`. It bypasses the physical MCX boot menu and
-must not be programmed into an EPROM. Stock mode leaves the BASIC prompt
-usable for manual `CLOADM`, cassette `Play`, and `EXEC`; it does not queue
-`CLOADM` because the XRoar auto-keyboard breakpoint is unreliable with the
-MCX cartridge attached. See [the stock-mode diagnostic notes](docs/mcx-direct-boot.md#stock-mode-diagnostic-image).
+must not be programmed into an EPROM. Stock mode defaults to the manual
+`CLOADM`, cassette `Play`, and `EXEC` sequence because the installed XRoar
+binary bypasses the MCX cartridge during its auto-keyboard return hook. The
+source fix and optional automatic path are documented in [the XRoar
+auto-keyboard notes](docs/xroar-auto-keyboard.md).
 
 Use `.\space-invaders.ps1 check` to validate tool and source prerequisites without launching the emulator. Use `.\space-invaders.ps1 clean` to remove generated artifacts.
 

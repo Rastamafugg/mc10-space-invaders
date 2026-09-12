@@ -1,0 +1,7 @@
+diff --git a/src/gtk3/menu.ui b/src/gtk3/menu.ui
+--- a/src/gtk3/menu.ui
++++ b/src/gtk3/menu.ui
+@@ -1,2 +1,3 @@
++<?xml version="1.0" encoding="UTF-8"?>
+ <ui>
+   <accelerator name='InsertDisk1' action='InsertDisk1Action'/>

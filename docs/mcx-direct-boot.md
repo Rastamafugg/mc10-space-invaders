@@ -102,7 +102,19 @@ it bypasses the MCX boot menu and firmware initialization, and it must not be
 programmed into an MCX-128 cartridge. It is useful for isolating stock BASIC
 cassette loading from MCX firmware or bank-mapping behavior.
 
-The stock direct mode intentionally does not queue `CLOADM`; XRoar's
-auto-keyboard breakpoint is unreliable when the MCX cartridge is attached to
-the host stock ROM. At the prompt, enter `CLOADM`, press `Ctrl+T`, press
-`Play`, wait for the cassette transfer to finish, and enter `EXEC`.
+The stock direct mode defaults to a manual cassette path because the installed
+XRoar binary contains an MCX cartridge auto-keyboard defect. At the prompt,
+enter `CLOADM`, press `Ctrl+T`, press `Play`, wait for the cassette transfer to
+finish, and enter `EXEC`. The defect and a source patch are documented in
+[the XRoar auto-keyboard notes](xroar-auto-keyboard.md).
+
+After building XRoar with that patch, set both variables below to enable the
+automatic `-run` path:
+
+```powershell
+$env:MC10_XROAR = '/home/user/src/xroar/src/xroar'
+$env:MC10_XROAR_MC10_CART_PATCHED = '1'
+```
+
+The patched path queues the command, starts the cassette, and reaches the
+loaded program at `$5000` with the MCX cartridge attached.
