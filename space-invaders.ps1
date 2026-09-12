@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('build', 'run', 'utility', 'utility-run', 'test', 'check', 'clean')]
+    [ValidateSet('build', 'run', 'utility', 'utility-run', 'calibrator', 'calibrator-run', 'test', 'check', 'clean')]
     [string]$Mode = 'build'
 )
 
@@ -12,9 +12,17 @@ if ($LASTEXITCODE -ne 0 -or -not $linuxRoot) {
     throw 'WSL could not resolve the project directory.'
 }
 
-if ($Mode -in @('run', 'utility-run')) {
-    $buildTarget = if ($Mode -eq 'utility-run') { 'utility' } else { 'build' }
-    $cassetteName = if ($Mode -eq 'utility-run') { 'environment-test.c10' } else { 'space-invaders.c10' }
+if ($Mode -in @('run', 'utility-run', 'calibrator-run')) {
+    $buildTarget = switch ($Mode) {
+        'utility-run' { 'utility'; break }
+        'calibrator-run' { 'calibrator'; break }
+        default { 'build' }
+    }
+    $cassetteName = switch ($Mode) {
+        'utility-run' { 'environment-test.c10'; break }
+        'calibrator-run' { 'timing-calibrator.c10'; break }
+        default { 'space-invaders.c10' }
+    }
     & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" $buildTarget
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
@@ -69,6 +77,10 @@ if ($Mode -eq 'test') {
         exit $LASTEXITCODE
     }
     & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" utility
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" calibrator
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

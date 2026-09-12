@@ -35,6 +35,17 @@ The diagnostic utility is a separate target:
 .\space-invaders.ps1 utility-run
 ```
 
+The live field-timing calibrator is also separate:
+
+```powershell
+.\space-invaders.ps1 calibrator
+.\space-invaders.ps1 calibrator-run
+```
+
+It displays the compare period, signed phase, and event count, and toggles
+P2.0 for external comparison with MC6847 FS. It does not require an MCX-128
+ROM. See [the calibrator procedure](docs/timer-compare-test.md#live-timing-calibrator).
+
 The build emits:
 
 - `build/space-invaders.bin` — raw MC6803 program.

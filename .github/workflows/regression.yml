@@ -23,5 +23,8 @@ jobs:
       - name: Build utility cassette
         run: bash scripts/build.sh utility
 
+      - name: Build timing calibrator cassette
+        run: bash scripts/build.sh calibrator
+
       - name: Run portable regression checks
         run: python3 scripts/regression.py --skip-emulator

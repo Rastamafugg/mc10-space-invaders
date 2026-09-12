@@ -14,6 +14,8 @@ SCREEN          EQU     $4000
 VIDEO_MODE      EQU     $BFFF
 CG3_GYBR        EQU     $24
 SCREEN_BYTES    EQU     $0C00
+BACKGROUND_COLOR EQU   $02        ; GYBR blue
+BACKGROUND_BYTE  EQU   $AA        ; four blue pixels
 
 ; MC6803 timer and keyboard registers.
 TIMER_CSR       EQU     $0008
@@ -23,6 +25,7 @@ TIMER_DDR2      EQU     $0001
 TIMER_PORT2     EQU     $0003
 TIMER_OCF_VECTOR EQU    $4206
 TIMER_PERIOD    EQU     $3A56       ; 14,934 E clocks at 59.923 Hz
+TIMER_PHASE     EQU     $0000       ; signed initial compare offset
 PORT1_DDR       EQU     $0000
 PORT1           EQU     $0002
 KEYBOARD_ROWS   EQU     $BFFF
@@ -44,7 +47,7 @@ GAME_ALIEN_SHOT_X EQU    $00EC
 GAME_ALIEN_SHOT_Y EQU    $00ED
 GAME_ALIEN_SHOT_ACTIVE EQU $00EE
 GAME_ALIEN_SHOT_TICK EQU  $00EF
-GAME_INVADER_X  EQU     $00F0       ; leftmost byte coordinate, 1..8
+GAME_INVADER_X  EQU     $00F0       ; leftmost pixel coordinate, 8..20
 GAME_INVADER_Y  EQU     $00F1       ; top pixel coordinate
 GAME_INVADER_DIR EQU     $00F2       ; 1=right, 0=left
 GAME_INVADER_TICK EQU   $00F3
@@ -87,6 +90,14 @@ PLOT_SHIFT      EQU     $014F
 PLOT_MASK       EQU     $0150
 PLOT_ENCODED    EQU     $0151
 WORK_COLOR      EQU     $0152
+FORMATION_BUSY  EQU     $0153       ; formation translation has rows pending
+FORMATION_ROW   EQU     $0154       ; next row to erase and redraw
+FORMATION_OLD_X EQU     $0155       ; previous formation pixel X
+FORMATION_OLD_Y EQU     $0156       ; previous formation top Y
+FORMATION_OLD_ANIM EQU  $0157       ; sprite frame at previous position
+FORMATION_NEW_ANIM EQU  $0158       ; sprite frame at current position
+FORMATION_SAVE_X EQU     $0159      ; temporary formation X during reset
+FORMATION_SAVE_Y EQU     $015A      ; temporary formation Y during reset
 
         *       = $5000
 
@@ -109,6 +120,7 @@ start = *
         LDAA    TIMER_CSR
         LDD     TIMER_COUNTER
         ADDD    #TIMER_PERIOD
+        ADDD    #TIMER_PHASE
         STD     TIMER_COMPARE
         LDAA    #$01
         STAA    TIMER_DDR2
@@ -157,10 +169,9 @@ game_initialize = *
 
         ; Clear 12 pages, $4000-$4BFF.
         LDX     #SCREEN
-        CLRA
         LDAA    #$0C
         STAA    WORK_TEMP
-        CLRA
+        LDAA    #BACKGROUND_BYTE
         LDAB    #$00
 game_clear_screen_loop = *
         STAA    0,X
@@ -186,16 +197,25 @@ game_clear_screen_loop = *
         STAA    GAME_BONUS_TICK
         STAA    GAME_ANIM
         STAA    GAME_TICK
+        STAA    FORMATION_BUSY
+        STAA    FORMATION_ROW
         LDAA    #$03
         STAA    GAME_LIVES
         LDAA    #$0F
         STAA    GAME_PLAYER_X
-        LDAA    #$01
+        LDAA    #$08                    ; pixel coordinate, 8-pixel margin
         STAA    GAME_INVADER_X
+        LDAA    #$01
         STAA    GAME_INVADER_DIR
         STAA    GAME_SHIELDS_ACTIVE
-        LDAA    #$05                    ; keep scanline 16 clear for OCF vector
+        LDAA    #$04                    ; keep scanline 16 clear for OCF vector
         STAA    GAME_INVADER_Y
+        STAA    FORMATION_OLD_Y
+        LDAA    GAME_INVADER_X
+        STAA    FORMATION_OLD_X
+        LDAA    GAME_ANIM
+        STAA    FORMATION_OLD_ANIM
+        STAA    FORMATION_NEW_ANIM
         LDAA    #$5A
         STAA    GAME_RNG
 
@@ -224,25 +244,11 @@ game_initialize_aliens_loop = *
 
 ; One simulation update per compare event. Dynamic objects are erased using
 ; their previous positions, persistent shields retain damage in video RAM, and
-; the current state is drawn over the black background.
+; the current state is drawn over the blue background.
 game_update = *
         LDAA    GAME_OVER
         BNE     game_update_done
 
-        ; The formation remains in video RAM between movement events. Erase
-        ; its previous position only on the update that will move it. This
-        ; keeps the CPU from spending most of every field redrawing 55 aliens.
-        CLRA
-        STAA    GAME_TICK
-        LDAA    GAME_INVADER_TICK
-        CMPA    #$0F
-        BNE     game_update_no_formation_erase
-        LDAA    #$01
-        STAA    GAME_TICK
-        CLRA
-        STAA    GAME_RENDER_MODE
-        JSR     game_draw_formation
-game_update_no_formation_erase = *
         JSR     game_erase_dynamic
         JSR     game_keyboard
         JSR     game_player_bullet_update
@@ -250,20 +256,30 @@ game_update_no_formation_erase = *
         JSR     game_bonus_update
         JSR     game_invader_update
 
+        ; A formation move is spread over five fields. Each field touches
+        ; only one alien row, reducing the visible update region and leaving
+        ; the other rows stable while the MC6847 scans them.
+        LDAA    GAME_TICK
+        BEQ     game_update_no_full_formation
+        CLRA
+        STAA    GAME_TICK
+        LDAA    #$01
+        STAA    GAME_RENDER_MODE
+        JSR     game_draw_formation
+game_update_no_full_formation = *
+        LDAA    FORMATION_BUSY
+        BEQ     game_update_no_formation_row
+        JSR     game_update_formation_row
+game_update_no_formation_row = *
+
         INC     GAME_FRAME
         LDAA    GAME_FRAME
         BITA    #$07
         BNE     game_update_draw
-        LDAA    GAME_ANIM
-        EORA    #$01
-        STAA    GAME_ANIM
+        LDAA    FORMATION_BUSY
+        BNE     game_update_draw
+        JSR     game_begin_formation_animation
 game_update_draw = *
-        LDAA    GAME_TICK
-        BEQ     game_update_no_formation_draw
-        LDAA    #$01
-        STAA    GAME_RENDER_MODE
-        JSR     game_draw_formation
-game_update_no_formation_draw = *
         JSR     game_draw_dynamic
         JSR     game_draw_score
         JSR     game_draw_lives
@@ -358,11 +374,9 @@ game_draw_dynamic = *
 game_draw_dynamic_done = *
         RTS
 
-; Formation renderer: 11 columns by 5 rows, two bytes per alien. The arcade
-; order is top octopus row, two crab rows, then two squid rows.
+; Formation renderer: 11 columns by 5 rows. Each eight-pixel alien is
+; pixel-packed so its ten-pixel column pitch leaves a two-pixel gap.
 game_draw_formation = *
-        LDX     #ALIEN_LIVE
-        STX     WORK_ROW_PTR
         CLRA
         STAA    WORK_ROW
         LDAA    GAME_INVADER_Y
@@ -370,31 +384,86 @@ game_draw_formation = *
         LDAA    #$05
         STAA    GAME_TEMP
 game_draw_formation_row = *
-        JSR     game_set_row_type
         LDAA    GAME_INVADER_X
         STAA    WORK_XBYTE
-        LDAA    #$0B
-        STAA    GAME_TEMP2
-game_draw_formation_col = *
-        LDX     WORK_ROW_PTR
-        LDAA    0,X
-        BEQ     game_draw_formation_skip
-        JSR     game_draw_alien
-game_draw_formation_skip = *
-        LDX     WORK_ROW_PTR
-        INX
-        STX     WORK_ROW_PTR
-        LDAA    WORK_XBYTE
-        ADDA    #$02
-        STAA    WORK_XBYTE
-        DEC     GAME_TEMP2
-        BNE     game_draw_formation_col
+        JSR     game_draw_formation_single_row
         LDAA    WORK_Y
-        ADDA    #$06
+        ADDA    #$07
         STAA    WORK_Y
         INC     WORK_ROW
         DEC     GAME_TEMP
         BNE     game_draw_formation_row
+        RTS
+
+; Draw one formation row at WORK_XBYTE/WORK_Y. WORK_ROW selects both the
+; alien type and its live-array row. This is also used for row-wise movement.
+game_draw_formation_single_row = *
+        JSR     game_set_row_type
+        JSR     game_select_row_pointer
+        LDAA    #$0B
+        STAA    GAME_TEMP2
+game_draw_formation_single_col = *
+        LDX     WORK_ROW_PTR
+        LDAA    0,X
+        BEQ     game_draw_formation_single_skip
+        JSR     game_draw_alien
+game_draw_formation_single_skip = *
+        LDX     WORK_ROW_PTR
+        INX
+        STX     WORK_ROW_PTR
+        LDAA    WORK_XBYTE
+        ADDA    #$0A
+        STAA    WORK_XBYTE
+        DEC     GAME_TEMP2
+        BNE     game_draw_formation_single_col
+        RTS
+
+; Erase one row at its previous position, then draw it at the current
+; formation position. Five successive calls complete one translation.
+game_update_formation_row = *
+        LDAA    FORMATION_ROW
+        STAA    WORK_ROW
+        LDAA    FORMATION_OLD_X
+        STAA    WORK_XBYTE
+        LDAA    FORMATION_OLD_Y
+        STAA    WORK_Y
+        LDAA    FORMATION_OLD_ANIM
+        STAA    GAME_ANIM
+        JSR     game_add_formation_row_offset
+        CLRA
+        STAA    GAME_RENDER_MODE
+        JSR     game_draw_formation_single_row
+
+        LDAA    FORMATION_ROW
+        STAA    WORK_ROW
+        LDAA    GAME_INVADER_X
+        STAA    WORK_XBYTE
+        LDAA    GAME_INVADER_Y
+        STAA    WORK_Y
+        LDAA    FORMATION_NEW_ANIM
+        STAA    GAME_ANIM
+        JSR     game_add_formation_row_offset
+        LDAA    #$01
+        STAA    GAME_RENDER_MODE
+        JSR     game_draw_formation_single_row
+
+        INC     FORMATION_ROW
+        LDAA    FORMATION_ROW
+        CMPA    #$05
+        BCS     game_update_formation_row_done
+        CLRA
+        STAA    FORMATION_BUSY
+game_update_formation_row_done = *
+        RTS
+
+game_add_formation_row_offset = *
+        LDAA    WORK_ROW
+        TAB
+        LDX     #formation_row_offsets
+        ABX
+        LDAA    0,X
+        ADDA    WORK_Y
+        STAA    WORK_Y
         RTS
 
 game_set_row_type = *
@@ -416,12 +485,12 @@ game_row_top = *
 game_row_middle = *
         LDAA    #$01                    ; crab
         STAA    WORK_TYPE
-        LDAA    #$02                    ; blue
+        CLRA                            ; green
         STAA    WORK_COLOR
 game_row_color_done = *
         LDAA    GAME_RENDER_MODE
         BNE     game_row_type_done
-        CLRA
+        LDAA    #BACKGROUND_COLOR
         STAA    WORK_COLOR
 game_row_type_done = *
         RTS
@@ -436,12 +505,78 @@ game_draw_alien = *
         ABX
         LDD     0,X
         STD     WORK_SPRITE
-        LDAA    #$02
-        STAA    WORK_WIDTH
+        LDAA    WORK_TYPE
+        BNE     game_draw_alien_full_height
+        LDAA    #$04                    ; smaller, pointy red invader
+        BRA     game_draw_alien_height_ready
+game_draw_alien_full_height = *
         LDAA    #$05
+game_draw_alien_height_ready = *
         STAA    WORK_HEIGHT
-        JSR     game_set_draw_address
-        JSR     game_draw_mask_sprite
+        JSR     game_draw_alien_pixels
+        RTS
+
+; Plot the two four-pixel mask nibbles at an arbitrary pixel X coordinate.
+; This permits a two-pixel horizontal gap between adjacent eight-pixel
+; invaders without sacrificing the full eleven-column formation.
+game_draw_alien_pixels = *
+        LDAA    GAME_RENDER_MODE
+        BNE     game_draw_alien_color_ready
+        LDAA    #BACKGROUND_COLOR
+        STAA    WORK_COLOR
+game_draw_alien_color_ready = *
+        LDAA    WORK_Y
+        STAA    PLOT_Y
+        LDAA    WORK_HEIGHT
+        STAA    WORK_TEMP
+game_draw_alien_row = *
+        LDX     WORK_SPRITE
+        LDAA    0,X
+        INX
+        STX     WORK_SPRITE
+        STAA    WORK_SHAPE
+        LDAA    WORK_XBYTE
+        STAA    WORK_TEMP2
+        JSR     game_draw_alien_nibble
+
+        LDX     WORK_SPRITE
+        LDAA    0,X
+        INX
+        STX     WORK_SPRITE
+        STAA    WORK_SHAPE
+        LDAA    WORK_XBYTE
+        ADDA    #$04
+        STAA    WORK_TEMP2
+        JSR     game_draw_alien_nibble
+
+        INC     PLOT_Y
+        DEC     WORK_TEMP
+        BNE     game_draw_alien_row
+        RTS
+
+game_draw_alien_nibble = *
+        LDAA    #$08
+        STAA    PLOT_MASK
+        CLRA
+        STAA    WORK_COL
+game_draw_alien_nibble_loop = *
+        LDAA    WORK_SHAPE
+        ANDA    PLOT_MASK
+        BEQ     game_draw_alien_nibble_skip
+        LDAA    WORK_TEMP2
+        ADDA    WORK_COL
+        STAA    PLOT_X
+        LDAA    WORK_COLOR
+        STAA    PLOT_COLOR
+        JSR     game_plot_pixel
+game_draw_alien_nibble_skip = *
+        LDAA    PLOT_MASK
+        LSRA
+        STAA    PLOT_MASK
+        INC     WORK_COL
+        LDAA    WORK_COL
+        CMPA    #$04
+        BCS     game_draw_alien_nibble_loop
         RTS
 
 game_draw_player = *
@@ -468,7 +603,7 @@ game_draw_bullet = *
         STAA    WORK_XBYTE
         LDAA    GAME_BULLET_Y
         STAA    WORK_Y
-        LDAA    #$02                    ; blue
+        LDAA    #$01                    ; yellow against blue background
         STAA    WORK_COLOR
         LDX     #player_bullet_sprite
         STX     WORK_SPRITE
@@ -506,7 +641,7 @@ game_draw_bonus = *
         BEQ     game_draw_bonus_done
         LDAA    GAME_BONUS_X
         STAA    WORK_XBYTE
-        LDAA    #$02
+        LDAA    #$01
         STAA    WORK_Y
         LDAA    #$01                    ; yellow
         STAA    WORK_COLOR
@@ -542,7 +677,7 @@ game_draw_mask_sprite = *
         ; draw. Force the selected color to the CG3 background during erase.
         LDAA    GAME_RENDER_MODE
         BNE     game_draw_mask_color_ready
-        CLRA
+        LDAA    #BACKGROUND_COLOR
         STAA    WORK_COLOR
 game_draw_mask_color_ready = *
         LDAA    WORK_HEIGHT
@@ -603,7 +738,7 @@ game_colorize_mask_byte = *
         RTS
 
 ; Initial shield structures are persistent pixels in video RAM. Damage writes
-; black pixels into them, producing the arcade-style burrowing holes.
+; background pixels into them, producing the arcade-style burrowing holes.
 game_draw_shields = *
         LDAA    #$01
         STAA    WORK_COLOR
@@ -611,7 +746,7 @@ game_draw_shields = *
         STAA    WORK_WIDTH
         LDAA    #$07
         STAA    WORK_HEIGHT
-        LDAA    #$3C
+        LDAA    #$46                    ; closer to the player
         STAA    WORK_Y
         LDAA    #$04
         STAA    WORK_XBYTE
@@ -634,7 +769,7 @@ game_clear_shields = *
         STAA    GAME_SHIELDS_ACTIVE
         LDAA    #$03
         STAA    WORK_XBYTE
-        LDAA    #$3A
+        LDAA    #$44
         STAA    WORK_Y
         LDAA    #$1C
         STAA    WORK_WIDTH
@@ -744,7 +879,7 @@ game_clear_rect = *
 game_clear_rect_row = *
         LDAA    WORK_WIDTH
         STAA    WORK_COL
-        CLRA
+        LDAA    #BACKGROUND_BYTE
         LDX     WORK_ADDR
 game_clear_rect_col = *
         STAA    0,X
@@ -773,7 +908,7 @@ game_player_bullet_update = *
         LDAA    GAME_BULLET_ACTIVE
         BEQ     game_player_bullet_done
         LDAA    GAME_BULLET_Y
-        CMPA    #$3A
+        CMPA    #$46
         BCS     game_player_bullet_done
         JSR     game_prepare_bullet_plot
         LDAA    GAME_SHIELDS_ACTIVE
@@ -815,10 +950,17 @@ game_bullet_bonus_done = *
 
 ; Find the lowest live invader under the bullet and remove it.
 game_bullet_hit_alien = *
+        ; Do not resolve a hit while a row region is between positions. The
+        ; next row step will use the live flag and avoids leaving a stale
+        ; sprite in either half of the moving region.
+        LDAA    FORMATION_BUSY
+        BEQ     game_bullet_alien_start
+        RTS
+game_bullet_alien_start = *
         LDAA    #$04
         STAA    WORK_ROW
         LDAA    GAME_INVADER_Y
-        ADDA    #$18
+        ADDA    #$1C
         STAA    WORK_Y
 game_bullet_alien_row = *
         JSR     game_select_row_pointer
@@ -831,25 +973,31 @@ game_bullet_alien_row = *
         BLS     game_bullet_alien_row_next
         LDAA    GAME_INVADER_X
         STAA    WORK_XBYTE
+        LDAA    GAME_BULLET_X
+        ASLA
+        ASLA
+        ADDA    #$02
+        STAA    WORK_TEMP
         LDAA    #$0B
         STAA    WORK_COL
 game_bullet_alien_col = *
         LDX     WORK_ROW_PTR
         LDAA    0,X
         BEQ     game_bullet_alien_col_next
-        LDAA    GAME_BULLET_X
+        LDAA    WORK_TEMP
         CMPA    WORK_XBYTE
-        BEQ     game_bullet_alien_hit
+        BCS     game_bullet_alien_col_next
         LDAA    WORK_XBYTE
-        INCA
-        CMPA    GAME_BULLET_X
-        BEQ     game_bullet_alien_hit
+        ADDA    #$08
+        CMPA    WORK_TEMP
+        BLS     game_bullet_alien_col_next
+        BRA     game_bullet_alien_hit
 game_bullet_alien_col_next = *
         LDX     WORK_ROW_PTR
         INX
         STX     WORK_ROW_PTR
         LDAA    WORK_XBYTE
-        ADDA    #$02
+        ADDA    #$0A
         STAA    WORK_XBYTE
         DEC     WORK_COL
         BNE     game_bullet_alien_col
@@ -878,7 +1026,7 @@ game_bullet_alien_row_next = *
         DEC     WORK_ROW
         BEQ     game_bullet_alien_done
         LDAA    WORK_Y
-        SUBA    #$06
+        SUBA    #$07
         STAA    WORK_Y
         JMP     game_bullet_alien_row
 game_bullet_alien_done = *
@@ -906,11 +1054,20 @@ game_check_wave_loop = *
         JSR     game_initialize_aliens
         CLRA
         STAA    GAME_INVADER_TICK
-        LDAA    #$01
+        STAA    FORMATION_BUSY
+        STAA    FORMATION_ROW
+        LDAA    #$08
         STAA    GAME_INVADER_X
+        LDAA    #$01
         STAA    GAME_INVADER_DIR
-        LDAA    #$05
+        LDAA    #$04
         STAA    GAME_INVADER_Y
+        STAA    FORMATION_OLD_Y
+        LDAA    GAME_INVADER_X
+        STAA    FORMATION_OLD_X
+        LDAA    GAME_ANIM
+        STAA    FORMATION_OLD_ANIM
+        STAA    FORMATION_NEW_ANIM
         LDAA    #$01
         STAA    GAME_TICK
 game_check_wave_done = *
@@ -984,9 +1141,20 @@ game_alien_shot_update = *
 game_alien_shot_mod = *
         SUBA    #$0B
 game_alien_shot_column = *
+        ; Convert the selected ten-pixel formation column to the byte
+        ; coordinate used by the one-pixel-wide alien projectile.
+        STAA    WORK_TEMP
         ASLA
+        STAA    WORK_TEMP2             ; column * 2
+        LDAA    WORK_TEMP
+        ASLA
+        ASLA
+        ASLA                            ; column * 8
+        ADDA    WORK_TEMP2             ; column * 10
         ADDA    GAME_INVADER_X
-        INCA
+        ADDA    #$04                    ; center of the alien
+        LSRA
+        LSRA
         STAA    GAME_ALIEN_SHOT_X
         LDAA    GAME_INVADER_Y
         ADDA    #$1E
@@ -1006,7 +1174,7 @@ game_alien_shot_move = *
         STAA    GAME_ALIEN_SHOT_TICK
         INC     GAME_ALIEN_SHOT_Y
         LDAA    GAME_ALIEN_SHOT_Y
-        CMPA    #$3A
+        CMPA    #$46
         BCS     game_alien_shot_player_check
         LDAA    GAME_SHIELDS_ACTIVE
         BEQ     game_alien_shot_player_check
@@ -1083,7 +1251,7 @@ game_damage_shield = *
         RTS
 
 game_plot_black = *
-        CLRA
+        LDAA    #BACKGROUND_COLOR
         STAA    PLOT_COLOR
         JSR     game_plot_pixel
         RTS
@@ -1120,6 +1288,17 @@ game_get_pixel_shift = *
         BRA     game_get_pixel_shift
 game_get_pixel_mask = *
         ANDA    #$03
+        CMPA    #BACKGROUND_COLOR
+        BNE     game_get_pixel_non_background
+        CLRA
+        RTS
+game_get_pixel_non_background = *
+        ; Green is a valid alien color but has numeric value zero. Return a
+        ; nonzero sentinel so collision callers still recognize it as lit.
+        TSTA
+        BNE     game_get_pixel_lit
+        LDAA    #$01
+game_get_pixel_lit = *
         RTS
 
 game_plot_pixel = *
@@ -1171,33 +1350,79 @@ game_invader_update = *
         LDAA    GAME_INVADER_DIR
         BEQ     game_invader_left
         LDAA    GAME_INVADER_X
-        CMPA    #$08
+        CMPA    #$14
         BCC     game_invader_right_edge
+        STAA    FORMATION_OLD_X
+        LDAA    GAME_INVADER_Y
+        STAA    FORMATION_OLD_Y
+        LDAA    GAME_INVADER_X
         INCA
         STAA    GAME_INVADER_X
+        JSR     game_begin_formation_update
         RTS
 game_invader_right_edge = *
+        LDAA    GAME_INVADER_X
+        STAA    FORMATION_OLD_X
+        LDAA    GAME_INVADER_Y
+        STAA    FORMATION_OLD_Y
         CLRA
         STAA    GAME_INVADER_DIR
+        JSR     game_begin_formation_update
         JSR     game_invader_descend
         RTS
 game_invader_left = *
         LDAA    GAME_INVADER_X
-        CMPA    #$01
+        CMPA    #$08
         BLS     game_invader_left_edge
+        STAA    FORMATION_OLD_X
+        LDAA    GAME_INVADER_Y
+        STAA    FORMATION_OLD_Y
+        LDAA    GAME_INVADER_X
         DECA
         STAA    GAME_INVADER_X
+        JSR     game_begin_formation_update
         RTS
 game_invader_left_edge = *
+        LDAA    GAME_INVADER_X
+        STAA    FORMATION_OLD_X
+        LDAA    GAME_INVADER_Y
+        STAA    FORMATION_OLD_Y
         LDAA    #$01
         STAA    GAME_INVADER_DIR
+        JSR     game_begin_formation_update
         JSR     game_invader_descend
 game_invader_done = *
         RTS
 
+game_begin_formation_update = *
+        LDAA    GAME_ANIM
+        STAA    FORMATION_OLD_ANIM
+        STAA    FORMATION_NEW_ANIM
+        LDAA    #$01
+        STAA    FORMATION_BUSY
+        CLRA
+        STAA    FORMATION_ROW
+        RTS
+
+game_begin_formation_animation = *
+        LDAA    GAME_INVADER_X
+        STAA    FORMATION_OLD_X
+        LDAA    GAME_INVADER_Y
+        STAA    FORMATION_OLD_Y
+        LDAA    GAME_ANIM
+        STAA    FORMATION_OLD_ANIM
+        EORA    #$01
+        STAA    GAME_ANIM
+        STAA    FORMATION_NEW_ANIM
+        LDAA    #$01
+        STAA    FORMATION_BUSY
+        CLRA
+        STAA    FORMATION_ROW
+        RTS
+
 game_invader_descend = *
         LDAA    GAME_INVADER_Y
-        ADDA    #$06
+        ADDA    #$07
         STAA    GAME_INVADER_Y
         CMPA    #$20
         BCS     game_invader_player_level
@@ -1219,22 +1444,55 @@ game_lose_life = *
         STAA    GAME_LIVES
         BEQ     game_set_game_over
 
-        ; Remove the old formation before resetting its position. The new
-        ; formation is drawn at the end of this update.
+        ; Remove every possible visible position before resetting. During a
+        ; row update, some rows can still be at the old position while others
+        ; are already at the new one.
         CLRA
         STAA    GAME_RENDER_MODE
+        LDAA    FORMATION_BUSY
+        BEQ     game_lose_life_erase_current
+        LDAA    GAME_INVADER_X
+        STAA    FORMATION_SAVE_X
+        LDAA    GAME_INVADER_Y
+        STAA    FORMATION_SAVE_Y
+        LDAA    FORMATION_NEW_ANIM
+        STAA    GAME_ANIM
         JSR     game_draw_formation
+        LDAA    FORMATION_OLD_ANIM
+        STAA    GAME_ANIM
+        LDAA    FORMATION_OLD_X
+        STAA    GAME_INVADER_X
+        LDAA    FORMATION_OLD_Y
+        STAA    GAME_INVADER_Y
+        JSR     game_draw_formation
+        LDAA    FORMATION_SAVE_X
+        STAA    GAME_INVADER_X
+        LDAA    FORMATION_SAVE_Y
+        STAA    GAME_INVADER_Y
+        BRA     game_lose_life_reset
+game_lose_life_erase_current = *
+        JSR     game_draw_formation
+game_lose_life_reset = *
         LDAA    #$01
         STAA    GAME_TICK
-        LDAA    #$01
+        LDAA    #$08
         STAA    GAME_INVADER_X
+        LDAA    #$01
         STAA    GAME_INVADER_DIR
         CLRA
         STAA    GAME_INVADER_TICK
+        STAA    FORMATION_BUSY
+        STAA    FORMATION_ROW
         STAA    GAME_BULLET_ACTIVE
         STAA    GAME_ALIEN_SHOT_ACTIVE
-        LDAA    #$05
+        LDAA    #$04
         STAA    GAME_INVADER_Y
+        STAA    FORMATION_OLD_Y
+        LDAA    GAME_INVADER_X
+        STAA    FORMATION_OLD_X
+        LDAA    GAME_ANIM
+        STAA    FORMATION_OLD_ANIM
+        STAA    FORMATION_NEW_ANIM
         LDAA    #$0F
         STAA    GAME_PLAYER_X
         RTS
@@ -1245,6 +1503,7 @@ game_set_game_over = *
         STAA    GAME_BULLET_ACTIVE
         STAA    GAME_ALIEN_SHOT_ACTIVE
         STAA    GAME_BONUS_ACTIVE
+        STAA    FORMATION_BUSY
         RTS
 
 game_rng_next = *
@@ -1311,7 +1570,7 @@ game_bonus_start = *
 
 ; An alien row's vertical offsets and live-array row pointers.
 formation_row_offsets = *
-        DB      $00,$06,$0C,$12,$18
+        DB      $00,$07,$0E,$15,$1C
 alien_row_ptrs = *
         DW      ALIEN_LIVE,ALIEN_LIVE+11,ALIEN_LIVE+22
         DW      ALIEN_LIVE+33,ALIEN_LIVE+44
@@ -1321,11 +1580,12 @@ alien_sprite_ptrs = *
         DW      alien_mid_0,alien_mid_1
         DW      alien_bottom_0,alien_bottom_1
 
-; Sixteen-pixel-wide masks, two CG3 bytes per row, five rows per frame.
+; Eight-pixel-wide masks, two CG3 bytes per row. The red top invader uses
+; four rows so it is smaller and pointy; the other two types use five rows.
 alien_top_0 = *
-        DB      $03,$03,$07,$0E,$0F,$0F,$09,$09,$0A,$05
+        DB      $00,$06,$03,$0C,$07,$0E,$0F,$0F
 alien_top_1 = *
-        DB      $06,$06,$0F,$0F,$0B,$0D,$07,$0E,$09,$06
+        DB      $00,$04,$03,$0C,$07,$0E,$0F,$0F
 alien_mid_0 = *
         DB      $0C,$03,$07,$0E,$0F,$0F,$0A,$05,$06,$06
 alien_mid_1 = *
@@ -1381,10 +1641,11 @@ pixel_right_shifts = *
         DB      $06,$04,$02,$00
 
 colorize_table = *
-        DB      $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        DB      $00,$01,$04,$05,$10,$11,$14,$15,$40,$41,$44,$45,$50,$51,$54,$55
-        DB      $00,$02,$08,$0A,$20,$22,$28,$2A,$80,$82,$88,$8A,$A0,$A2,$A8,$AA
-        DB      $00,$03,$0C,$0F,$30,$33,$3C,$3F,$C0,$C3,$CC,$CF,$F0,$F3,$FC,$FF
+        ; Each unlit pixel is GYBR blue ($02), not zero.
+        DB      $AA,$A8,$A2,$A0,$8A,$88,$82,$80,$2A,$28,$22,$20,$0A,$08,$02,$00
+        DB      $AA,$A9,$A6,$A5,$9A,$99,$96,$95,$6A,$69,$66,$65,$5A,$59,$56,$55
+        DB      $AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA,$AA
+        DB      $AA,$AB,$AE,$AF,$BA,$BB,$BE,$BF,$EA,$EB,$EE,$EF,$FA,$FB,$FE,$FF
 
 ; Single-pixel encodings indexed by pixel position, then color.
 pixel_color_table = *

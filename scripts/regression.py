@@ -135,6 +135,9 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     utility_values = check_program_artifacts(
         root, build_dir, "environment-test", "environment-test.s"
     )
+    calibrator_values = check_program_artifacts(
+        root, build_dir, "timing-calibrator", "timing-calibrator.s"
+    )
     game_values = check_program_artifacts(root, build_dir, "space-invaders", "main.s")
 
     source = root / "src" / "environment-test.s"
@@ -162,6 +165,27 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     if missing_signatures:
         fail(f"source is missing MCX bank signatures: {', '.join(missing_signatures)}")
 
+    calibrator_source = root / "src" / "timing-calibrator.s"
+    calibrator_text = calibrator_source.read_text(encoding="ascii")
+    calibrator_tokens = (
+        "CAL_PERIOD_H",
+        "CAL_PHASE_H",
+        "CAL_EVENTS_H",
+        "cal_timer_isr",
+        "cal_keyboard",
+        "TIMER_OCF_VECTOR",
+        "TIMER_PORT2",
+        "cal_key_space",
+    )
+    missing_calibrator_tokens = [
+        token for token in calibrator_tokens if token not in calibrator_text
+    ]
+    if missing_calibrator_tokens:
+        fail(
+            "timing calibrator source is missing regression markers: "
+            + ", ".join(missing_calibrator_tokens)
+        )
+
     game_source = root / "src" / "main.s"
     game_text = game_source.read_text(encoding="ascii")
     game_tokens = (
@@ -175,6 +199,12 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
         "GAME_SCORE_0",
         "GAME_LIVES",
         "GAME_TICK",
+        "TIMER_PHASE",
+        "FORMATION_BUSY",
+        "FORMATION_OLD_X",
+        "FORMATION_NEW_ANIM",
+        "game_update_formation_row",
+        "BACKGROUND_COLOR",
     )
     missing_game_tokens = [token for token in game_tokens if token not in game_text]
     if missing_game_tokens:
@@ -183,10 +213,12 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     print(
         "regression: build artifacts pass "
         f"(utility ${utility_values['start']:04X}/{utility_values['size']} bytes, "
+        f"calibrator ${calibrator_values['start']:04X}/{calibrator_values['size']} bytes, "
         f"game ${game_values['start']:04X}/{game_values['size']} bytes)"
     )
     print("regression: cassette framing pass")
     print("regression: source covers all eight MCX bank signatures")
+    print("regression: live timing calibrator markers present")
     print("regression: CG3 game layout and gameplay markers present")
 
 

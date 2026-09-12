@@ -24,6 +24,44 @@ at 59.923 Hz. The interval is added to the previous compare value rather than
 the current counter, preserving phase across counter wrap and interrupt
 latency.
 
+## Live timing calibrator
+
+`src/timing-calibrator.s` is a separate `$5000` cassette program for tuning
+the compare schedule while the machine is running. It starts with the verified
+period `$3A56` and phase `$0000`, displays both values and a live compare-event
+counter, and toggles P2.0 on every output compare. The MC-10 cannot read `FS`,
+so the program cannot select the correct phase without an external connection.
+Use P2.0 and the MC6847 `FS` signal as the two channels of a scope or logic
+analyzer.
+
+| Key | Action |
+| --- | --- |
+| `A` / `D` | Decrease or increase period by one E clock |
+| `W` / `S` | Decrease or increase signed phase by eight E clocks |
+| `R` | Re-arm the next compare from the current counter |
+| `Space` | Reset the event counter and marker |
+
+Build and launch it on a stock XRoar MC-10 with:
+
+```powershell
+.\space-invaders.ps1 calibrator-run
+```
+
+This path does not require the MCX-128 ROM. The initial period is one modeled
+NTSC field. Adjust `A`/`D` until the measured marker period matches `FS`, then
+use `W`/`S` to move the marker edge to the desired field edge. Press `R` after
+large changes to re-anchor the schedule. The value shown in `PHASE` is a signed
+two's-complement E-clock offset.
+
+To carry a measured setting into the game, copy the displayed `PERIOD` and
+`PHASE` values into `TIMER_PERIOD` and `TIMER_PHASE` in `src/main.s`. The
+calibrator's defaults are the named constants
+`CAL_DEFAULT_PERIOD` and `CAL_DEFAULT_PHASE` in `src/timing-calibrator.s`.
+
+The calibrator is useful on real hardware and for verifying timer control in
+XRoar. XRoar does not expose its emulated `FS` edge as an MC-10 input, so an
+XRoar-only run cannot prove absolute FS phase.
+
 ## MC6803 setup
 
 The test follows the MC6803 timer definitions in the [MC6803
