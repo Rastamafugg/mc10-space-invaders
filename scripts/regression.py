@@ -230,7 +230,23 @@ def line_pattern(image: object, row: int, count: int) -> tuple[bool, ...]:
     return tuple(pattern)
 
 
-def check_screen(path: Path) -> tuple[bool, bool]:
+def playfield_cell_count(image: object) -> int:
+    """Count occupied character cells in the gameplay area."""
+    occupied = 0
+    for row in range(5, 14):
+        y0 = CHAR_Y + row * CHAR_HEIGHT
+        for column in range(32):
+            x0 = CHAR_X + column * CHAR_WIDTH
+            ink = any(
+                is_green(image.getpixel((x, y)))  # type: ignore[attr-defined]
+                for x in range(x0, min(x0 + GLYPH_WIDTH, SCREEN_SIZE[0]))
+                for y in range(y0, min(y0 + GLYPH_HEIGHT, SCREEN_SIZE[1]))
+            )
+            occupied += int(ink)
+    return occupied
+
+
+def check_screen(path: Path) -> tuple[bool, bool, bool]:
     try:
         from PIL import Image
     except ImportError:
@@ -243,7 +259,8 @@ def check_screen(path: Path) -> tuple[bool, bool]:
             image = image.resize(SCREEN_SIZE, resampling.NEAREST)
         mcx_ok = line_pattern(image, 2, len(MCX_OK_PATTERN)) == MCX_OK_PATTERN
         timer_ok = line_pattern(image, 3, len(TIMER_OK_PATTERN)) == TIMER_OK_PATTERN
-    return mcx_ok, timer_ok
+        playable_ok = playfield_cell_count(image) >= 6
+    return mcx_ok, timer_ok, playable_ok
 
 
 def run_emulator(root: Path, build_dir: Path, xroar: str, rom: Path, timeout: float) -> None:
@@ -285,7 +302,7 @@ def run_emulator(root: Path, build_dir: Path, xroar: str, rom: Path, timeout: fl
     )
     try:
         deadline = time.monotonic() + timeout
-        last_state = (False, False)
+        last_state = (False, False, False)
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 fail(f"XRoar exited before the expected screen state; see {log_path}")
@@ -293,9 +310,19 @@ def run_emulator(root: Path, build_dir: Path, xroar: str, rom: Path, timeout: fl
             if window is not None:
                 capture_window(root, window, screenshot)
                 last_state = check_screen(screenshot)
-                if last_state == (True, True):
-                    print("regression: XRoar screen pass (MCX128 RAM: OK, TIMER: OK)")
-                    return
+                if last_state[:2] == (True, True):
+                    # The timer status is written immediately before the game
+                    # state is initialized. Allow the first complete redraw to
+                    # finish before retaining the proof capture.
+                    time.sleep(0.75)
+                    capture_window(root, window, screenshot)
+                    last_state = check_screen(screenshot)
+                    if last_state == (True, True, True):
+                        print(
+                            "regression: XRoar screen pass "
+                            "(MCX128 RAM: OK, TIMER: OK, playfield rendered)"
+                        )
+                        return
             time.sleep(0.25)
         fail(
             "XRoar screen did not reach "

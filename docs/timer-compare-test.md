@@ -46,16 +46,16 @@ marker.
 
 The stock ROM's RAM-resident output-compare vector is normally an immediate
 `RTI`; the test claims that private vector for the diagnostic and subsequent
-game-loop scaffold. The screen displays `TIMER: WAIT`, then `TIMER: OK` after
-all 60 events, or `TIMER: FAIL` if the interrupt does not complete within the
-timeout. After `TIMER: OK`, the program re-arms the same interval and enters
-the game-loop scaffold, where the `FRAME: 0000` counter advances once per
-queued timer event.
+game loop. The screen displays `TIMER: WAIT`, then `TIMER: OK` after all 60
+events, or `TIMER: FAIL` if the interrupt does not complete within the timeout.
+After `TIMER: OK`, the program re-arms the same interval and initializes the
+playable text-mode game: A/D move the player, Space launches one shot, the
+two-row formation advances, and the score/lives HUD is updated.
 
 The interrupt handler remains short: it schedules the next compare, toggles
 P2.0, and either counts diagnostic events or increments the pending-tick byte.
-The foreground loop consumes pending ticks and calls `game_update`, which is
-the insertion point for input, simulation, collision, and rendering code.
+The foreground loop consumes pending ticks and calls `game_update`, which runs
+input, simulation, collision, HUD, and alpha-character rendering work.
 
 ## Physical measurement
 
@@ -137,8 +137,8 @@ then continues to the independent timer diagnostic; `TIMER: OK` in this mode
 validates cassette execution and timer cadence, not MCX banking. The full MCX
 path requires `MC10_MCX_ROM` and uses the `-load-tape` command shown above.
 
-The WSLg X11 capture produced `MCX128 ERROR`, `TIMER: OK`, and an advancing
-frame counter on the same screen. This is the accepted cassette/timer control
+The WSLg X11 capture produced `MCX128 ERROR`, `TIMER: OK`, and a rendered
+playfield on the same screen. This is the accepted cassette/timer control
 result; it is not an MCX-128 bank-test result.
 
 ### Base-machine RAM alternatives

@@ -150,7 +150,7 @@ python3 scripts/regression.py --skip-emulator
 
 ## Current test program
 
-`src/main.s` initializes the MC-10 alpha video mode, clears the 32×16 screen, writes a title and status line, switches MCX-128 to all-RAM mode, verifies distinct signatures through all eight selectable 16 KiB RAM windows, restores the normal map, runs the MC6803 timer-compare cadence test, and enters a timer-driven game-loop scaffold. The timer test reports `TIMER: OK` after 60 predicted MC6847 fields and toggles P2.0 for comparison with physical MC6847 FS timing. The scaffold consumes one queued tick per compare and increments a four-digit frame counter. See [the timer-compare procedure](docs/timer-compare-test.md). It is a loader/platform smoke test, not the game implementation.
+`src/main.s` initializes the MC-10 alpha video mode, clears the 32×16 screen, writes a title and status line, switches MCX-128 to all-RAM mode, verifies distinct signatures through all eight selectable 16 KiB RAM windows, restores the normal map, runs the MC6803 timer-compare cadence test, and enters the first playable timer-driven game loop. The timer test reports `TIMER: OK` after 60 predicted MC6847 fields and toggles P2.0 for comparison with physical MC6847 FS timing. The game loop scans A/D and Space, moves the player, launches one shot at a time, advances a two-row invader formation, removes hit invaders, updates score and lives, and redraws the playfield. See [the timer-compare procedure](docs/timer-compare-test.md). The rendering uses MC-10 alpha-mode characters as a deterministic first gameplay milestone.
 
 ## Project knowledge
 

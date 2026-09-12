@@ -177,6 +177,11 @@ def main():
     press.add_argument("window", type=lambda value: int(value, 0))
     press.add_argument("key")
 
+    hold = subparsers.add_parser("hold")
+    hold.add_argument("window", type=lambda value: int(value, 0))
+    hold.add_argument("key")
+    hold.add_argument("duration_ms", type=int)
+
     capture = subparsers.add_parser("capture")
     capture.add_argument("window", type=lambda value: int(value, 0))
     capture.add_argument("width", type=int)
@@ -223,10 +228,23 @@ def main():
             x11.key(modifier, False)
         x11.lib.XFlush(x11.dpy)
     elif args.command == "press":
-        keysyms = {"return": x11.XK_RETURN, "escape": 0xFF1B, "f4": 0xFFC1}
+        keysyms = {
+            "return": x11.XK_RETURN,
+            "escape": 0xFF1B,
+            "f4": 0xFFC1,
+            "space": 0x0020,
+        }
         keysym = keysyms[args.key.lower()] if args.key.lower() in keysyms else ord(args.key.lower())
         x11.focus(args.window)
         x11.key(keysym, True)
+        x11.key(keysym, False)
+        x11.lib.XFlush(x11.dpy)
+    elif args.command == "hold":
+        keysyms = {"return": x11.XK_RETURN, "escape": 0xFF1B, "f4": 0xFFC1, "space": 0x0020}
+        keysym = keysyms[args.key.lower()] if args.key.lower() in keysyms else ord(args.key.lower())
+        x11.focus(args.window)
+        x11.key(keysym, True)
+        time.sleep(max(args.duration_ms, 1) / 1000.0)
         x11.key(keysym, False)
         x11.lib.XFlush(x11.dpy)
     elif args.command == "close":

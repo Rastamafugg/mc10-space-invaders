@@ -80,7 +80,7 @@ prompt and the MCX boot menu through an X11 pixel capture. With the supplied
 MCX ROM, selecting `[2] MCX BASIC (LARGE)` currently blanks the display during
 the memory test and returns to the boot menu, so no MCX BASIC prompt or
 full-MCX `TIMER: OK` capture has been accepted yet. The stock no-cartridge
-control now produces `MCX128 ERROR`, `TIMER: OK`, and an advancing frame counter,
+control now produces `MCX128 ERROR`, `TIMER: OK`, and a rendered playfield,
 which verifies cassette execution, timer cadence, and WSLg capture separately.
 The reverse-`@` screen is the separate failure mode caused by attaching the MCX
 profile without an EPROM image.
