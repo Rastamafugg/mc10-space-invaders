@@ -50,8 +50,9 @@ start = *
         SEI
         LDS     #$00FF
 
-        ; MC-10 alpha mode: GNA=1, GM2..GM0=0, CSS=0.
-        LDAA    #$20
+        ; MC-10 alpha mode: GNA=0, GM2..GM0=0, CSS=0. The MC-10 VDG
+        ; control port uses D5 as the active-low GNA input.
+        LDAA    #$00
         STAA    VIDEO_MODE
 
         ; Clear both 256-byte halves of the 32x16 text screen.
