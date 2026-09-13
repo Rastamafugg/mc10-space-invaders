@@ -44,6 +44,8 @@ CAL_RECT_BYTES  EQU     $04             ; 16 pixels
 CAL_RECT_HEIGHT EQU     $08
 CAL_SWEEP_HEIGHT_MIN EQU $04
 CAL_SWEEP_HEIGHT_MAX EQU $30
+CAL_SWEEP_OFFSET_MIN EQU $A0         ; -$60 rows, permits a fully offscreen box
+CAL_SWEEP_OFFSET_MAX EQU $60         ; +$60 rows, permits a fully offscreen box
 CAL_RECT_SKIP   EQU     $001C           ; 32-byte line minus four bytes
 CAL_DRIFT_STEP  EQU     $04
 CAL_BAND_HEIGHT EQU     $04             ; full-width manual calibration band
@@ -82,7 +84,7 @@ CAL_SWEEP_HOLD  EQU     $00F8
 CAL_SWEEP_DIR   EQU     $00F9       ; 1=phase increasing, 0=decreasing
 CAL_SWEEP_Y     EQU     $00FA
 CAL_SWEEP_HEIGHT_STATE EQU $00FB     ; sweep rectangle height in CG3 rows
-CAL_SWEEP_OFFSET EQU $00FC         ; signed vertical bias, -$30..+$30
+CAL_SWEEP_OFFSET EQU $00FC         ; signed vertical bias, -$60..+$60
 
         *       = $5000
 
@@ -261,9 +263,14 @@ cal_key_w = *
 cal_key_w_sweep = *
         LDAA    CAL_SWEEP_OFFSET
         SUBA    #$04
-        CMPA    #$D0
-        BCC     cal_key_w_sweep_store
-        LDAA    #$D0
+        CMPA    #CAL_SWEEP_OFFSET_MAX
+        BCS     cal_key_w_sweep_store
+        BEQ     cal_key_w_sweep_store
+        CMPA    #CAL_SWEEP_OFFSET_MIN
+        BCS     cal_key_w_sweep_clamp
+        BRA     cal_key_w_sweep_store
+cal_key_w_sweep_clamp = *
+        LDAA    #CAL_SWEEP_OFFSET_MIN
 cal_key_w_sweep_store = *
         STAA    CAL_SWEEP_OFFSET
         JSR     cal_sweep_redraw
@@ -317,10 +324,14 @@ cal_key_s = *
 cal_key_s_sweep = *
         LDAA    CAL_SWEEP_OFFSET
         ADDA    #$04
-        CMPA    #$30
+        CMPA    #CAL_SWEEP_OFFSET_MAX
         BCS     cal_key_s_sweep_store
         BEQ     cal_key_s_sweep_store
-        LDAA    #$30
+        CMPA    #CAL_SWEEP_OFFSET_MIN
+        BCS     cal_key_s_sweep_clamp
+        BRA     cal_key_s_sweep_store
+cal_key_s_sweep_clamp = *
+        LDAA    #CAL_SWEEP_OFFSET_MAX
 cal_key_s_sweep_store = *
         STAA    CAL_SWEEP_OFFSET
         JSR     cal_sweep_redraw
@@ -616,14 +627,45 @@ cal_draw_band_byte = *
         RTS
 
 ; Draw a solid 16-pixel packed-CG3 rectangle at CAL_RECT_X/CAL_RECT_Y.
-; The height is CAL_SWEEP_HEIGHT_STATE rows. This routine uses the
-; foreground-only CAL_TEMP loop byte.
+; CAL_RECT_Y is a signed top coordinate for sweep mode. Rows outside the
+; 0..95 logical CG3 surface are clipped, allowing the witness to disappear
+; above or below the visible picture without writing outside video RAM. The
+; height is CAL_SWEEP_HEIGHT_STATE rows. This routine uses the foreground-only
+; CAL_TEMP loop byte.
 cal_draw_rect = *
         LDAA    CAL_RECT_Y
+        BMI     cal_draw_rect_negative
+        CMPA    #$60
+        BCS     cal_draw_rect_positive
+        RTS
+cal_draw_rect_positive = *
         LDAB    #$20
         MUL
         ADDD    #SCREEN
         STD     CAL_SCREEN_H
+        LDAA    #$60
+        SUBA    CAL_RECT_Y
+        CMPA    CAL_SWEEP_HEIGHT_STATE
+        BCS     cal_draw_rect_positive_count
+        LDAA    CAL_SWEEP_HEIGHT_STATE
+cal_draw_rect_positive_count = *
+        STAA    CAL_TEMP
+        BRA     cal_draw_rect_address
+cal_draw_rect_negative = *
+        COMA
+        INCA
+        STAA    CAL_TEMP2
+        CMPA    CAL_SWEEP_HEIGHT_STATE
+        BCS     cal_draw_rect_negative_count
+        BEQ     cal_draw_rect_done
+        RTS
+cal_draw_rect_negative_count = *
+        LDAA    CAL_SWEEP_HEIGHT_STATE
+        SUBA    CAL_TEMP2
+        STAA    CAL_TEMP
+        LDD     #SCREEN
+        STD     CAL_SCREEN_H
+cal_draw_rect_address = *
         LDAA    CAL_RECT_X
         LSRA
         LSRA
@@ -632,8 +674,6 @@ cal_draw_rect = *
         LDX     CAL_SCREEN_H
         ABX
         STX     CAL_SCREEN_H
-        LDAA    CAL_SWEEP_HEIGHT_STATE
-        STAA    CAL_TEMP
 cal_draw_rect_row = *
         LDX     CAL_SCREEN_H
         LDAA    CAL_RECT_BYTE
@@ -649,6 +689,8 @@ cal_draw_rect_bytes = *
         STD     CAL_SCREEN_H
         DEC     CAL_TEMP
         BNE     cal_draw_rect_row
+        RTS
+cal_draw_rect_done = *
         RTS
 
 ; Alpha display updates remain separate from visual witness updates.
@@ -696,11 +738,21 @@ cal_update_visual_done = *
         CLI
         RTS
 
-; Erase and redraw the manual band at its current phase-selected position.
-; Keeping the old coordinate allows W/S to move it cleanly off either edge.
+; Draw the manual band at its current phase-selected position and erase the
+; old position only when it changed. Drawing the new band first avoids a blank
+; frame at the old position and leaves the initial band untouched on compares
+; where the operator has not moved it.
 cal_manual_tick = *
         LDAA    CAL_RECT_Y
         STAA    CAL_TEMP2
+        LDAA    CAL_RECT_OLD_Y
+        CMPA    CAL_TEMP2
+        BEQ     cal_manual_tick_done
+        LDAA    CAL_TEMP2
+        STAA    CAL_RECT_Y
+        CLRA
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_band
         LDAA    CAL_RECT_OLD_Y
         STAA    CAL_RECT_Y
         LDAA    #BACKGROUND_BYTE
@@ -708,11 +760,9 @@ cal_manual_tick = *
         JSR     cal_draw_band
         LDAA    CAL_TEMP2
         STAA    CAL_RECT_Y
-        CLRA
-        STAA    CAL_RECT_BYTE
-        JSR     cal_draw_band
         LDAA    CAL_RECT_Y
         STAA    CAL_RECT_OLD_Y
+cal_manual_tick_done = *
         RTS
 
 ; Move the green marker one packed-pixel column per compare. The old marker
@@ -843,14 +893,13 @@ cal_sweep_draw = *
         LDAA    CAL_RECT_Y
         STAA    CAL_RECT_OLD_Y
         RTS
-; Convert the automatic sweep row plus signed operator bias to a visible
-; rectangle origin. Clamp to the current height so the complete box remains
-; within the 96 logical CG3 rows. CAL_TEMP is the largest legal origin and
-; CAL_TEMP2 is the absolute value of a negative bias.
+; Convert the automatic sweep row plus signed operator bias to a signed
+; rectangle origin. The result is deliberately not clamped to the visible
+; surface; cal_draw_rect clips the rows so the operator can move the box fully
+; offscreen. Positive coordinates are limited to $7F so the high bit remains
+; reserved for negative two's-complement coordinates. CAL_TEMP2 is the
+; absolute value of a negative bias.
 cal_sweep_actual_y = *
-        LDAA    #$60
-        SUBA    CAL_SWEEP_HEIGHT_STATE
-        STAA    CAL_TEMP
         LDAA    CAL_SWEEP_OFFSET
         BPL     cal_sweep_offset_positive
         COMA
@@ -858,17 +907,23 @@ cal_sweep_actual_y = *
         STAA    CAL_TEMP2
         LDAA    CAL_SWEEP_Y
         CMPA    CAL_TEMP2
-        BCS     cal_sweep_actual_zero
+        BCS     cal_sweep_actual_negative
         BEQ     cal_sweep_actual_zero
         SUBA    CAL_TEMP2
-        BRA     cal_sweep_actual_clamp
+        BRA     cal_sweep_actual_store
+cal_sweep_actual_negative = *
+        LDAA    CAL_TEMP2
+        SUBA    CAL_SWEEP_Y
+        COMA
+        INCA
+        BRA     cal_sweep_actual_store
 cal_sweep_offset_positive = *
         ADDA    CAL_SWEEP_Y
-cal_sweep_actual_clamp = *
-        CMPA    CAL_TEMP
+        BCS     cal_sweep_actual_bottom
+        CMPA    #$80
         BCS     cal_sweep_actual_store
-        BEQ     cal_sweep_actual_store
-        LDAA    CAL_TEMP
+cal_sweep_actual_bottom = *
+        LDAA    #$7F
         BRA     cal_sweep_actual_store
 cal_sweep_actual_zero = *
         CLRA

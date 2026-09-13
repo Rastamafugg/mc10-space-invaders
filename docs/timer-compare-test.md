@@ -101,15 +101,17 @@ rectangle moves vertically as the candidate phase changes. Press `P` to hold
 the current candidate while inspecting the display. While paused, press `A` or
 `D` to decrease or increase the red box height, and press `W` or `S` to move
 the box upward or downward. The height is clamped to 4-48 CG3 rows and the
-vertical bias is clamped to -48 through +48 rows. The box is clamped to the
-visible surface after both adjustments. Press `P` again to resume the scan, or
-press `M` to return to manual mode.
+vertical bias is clamped to -96 through +96 rows. The renderer clips rows that
+fall outside the visible surface, so the box can disappear above or below the
+screen. Press `P` again to resume the scan, or press `M` to return to manual
+mode.
 
 Changing height is useful for estimating the vertical duration of a safe
 interval: reduce the box until the visible boundary is clear, then increase it
-until rendering begins to overlap the unsafe portion. Moving the box tests
-whether that interval is stationary in screen coordinates. These controls are
-diagnostic only; they do not change the game's renderer.
+until rendering begins to overlap the unsafe portion. Moving the box completely
+offscreen identifies the portion of the cycle that is not represented in the
+visible picture. These controls are diagnostic only; they do not change the
+game's renderer.
 
 The sweep is an operator-guided search. The MC-10 has no CPU-readable FS input,
 video sampling path, or tear detector, so software cannot calculate a numeric
@@ -143,7 +145,9 @@ performs this sequence:
 5. Press `A` and `D` and verify the sweep height decreases and returns to its
    original value. Press `W` and `S` and verify the vertical bias moves up and
    returns to its original value.
-6. Press `P` again and return with `M` to the manual band.
+6. Press `P` again and return with `M` to the manual band. The automated path
+   also drives the box fully above and below the video surface and verifies
+   that no red video bytes are written outside the visible box.
 
 Run it after `.\space-invaders.ps1 calibrator` using the command in the
 [README harness section](../README.md#mame-lua-calibrator-harness). The

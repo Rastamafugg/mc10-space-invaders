@@ -4,8 +4,8 @@
 -- script controls only the emulated machine after startup: it enters CLOADM,
 -- starts the cassette, waits for the complete image, enters EXEC, verifies
 -- the manual band workflow, cycles alpha and the two advanced diagnostic
--- modes, exercises sweep-box height and vertical-position controls, and
--- analyzes the rendered screen pixels.
+-- modes, exercises sweep-box height and vertical-position controls including
+-- both off-screen directions, and analyzes the rendered screen pixels.
 --
 -- Run with:
 --   mame.exe mc10 -ramsize 20K -cass build/timing-calibrator.c10 \
@@ -59,9 +59,11 @@ local PHASE_WAIT_RESIZE_DOWN = 10
 local PHASE_WAIT_RESIZE_UP = 11
 local PHASE_WAIT_MOVE_UP = 12
 local PHASE_WAIT_MOVE_DOWN = 13
-local PHASE_WAIT_RESUME = 14
-local PHASE_WAIT_RETURN_MANUAL = 15
-local PHASE_DONE = 16
+local PHASE_WAIT_OFFSCREEN_BOTTOM = 14
+local PHASE_WAIT_OFFSCREEN_TOP = 15
+local PHASE_WAIT_RESUME = 16
+local PHASE_WAIT_RETURN_MANUAL = 17
+local PHASE_DONE = 18
 
 assert(cassette, "MC-10 cassette device not found")
 assert(screen, "MC-10 screen device not found")
@@ -83,6 +85,7 @@ local sweep_first = nil
 local paused_first = nil
 local paused_height = nil
 local paused_offset = nil
+local offscreen_target = nil
 local failed = false
 local tape_end_frame = nil
 
@@ -269,6 +272,33 @@ local function sample_cg3(label, expected_color)
         return nil
     end
     print_metrics(label, metrics)
+    return metrics
+end
+
+local function visible_red_bytes()
+    local count = 0
+    for address = 0x4000, 0x4BFF do
+        if address < 0x4206 or address > 0x4208 then
+            if read_byte(address) == 0xFF then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
+local function sample_cg3_background(label)
+    save_snapshot("mame-calibrator-" .. label)
+    local metrics = analyze_pixels()
+    local red_bytes = visible_red_bytes()
+    if metrics.counts.blue < ACTIVE_PIXELS * 0.90 or red_bytes ~= 0 then
+        return nil
+    end
+    print_metrics(label, metrics)
+    print(string.format(
+        "MC-10 pixels: %s red-video-bytes=%d",
+        label,
+        red_bytes))
     return metrics
 end
 
@@ -566,7 +596,8 @@ frame_subscription = emu.add_machine_frame_notifier(function()
                     "MC-10 pixels: sweep downward move pass offset=%02X y=%02X",
                     read_byte(CAL_SWEEP_OFFSET),
                     read_byte(CAL_RECT_Y)))
-                post_key("{P}", "P resume sweep", PHASE_WAIT_RESUME)
+                offscreen_target = (read_byte(CAL_SWEEP_OFFSET) + 4) % 0x100
+                post_key("S", "S move sweep box fully below screen", PHASE_WAIT_OFFSCREEN_BOTTOM)
             elseif frame > deadline then
                 fail("downward-moved phase-sweep box was not visible")
             end
@@ -574,6 +605,53 @@ frame_subscription = emu.add_machine_frame_notifier(function()
             fail(string.format(
                 "S did not restore sweep offset to %02X, got %02X",
                 paused_offset,
+                read_byte(CAL_SWEEP_OFFSET)))
+        end
+    elseif phase == PHASE_WAIT_OFFSCREEN_BOTTOM then
+        if read_byte(CAL_SWEEP_OFFSET) == offscreen_target then
+            if offscreen_target == 0x60 then
+                local background = sample_cg3_background("sweep-offscreen-bottom")
+                if background then
+                    print(string.format(
+                        "MC-10 pixels: sweep bottom offscreen pass offset=%02X y=%02X",
+                        read_byte(CAL_SWEEP_OFFSET),
+                        read_byte(CAL_RECT_Y)))
+                    offscreen_target = (read_byte(CAL_SWEEP_OFFSET) - 4) % 0x100
+                    post_key("W", "W move sweep box fully above screen", PHASE_WAIT_OFFSCREEN_TOP)
+                elseif frame > deadline then
+                    fail("sweep box remained visible at the lower offscreen limit")
+                end
+            else
+                offscreen_target = (read_byte(CAL_SWEEP_OFFSET) + 4) % 0x100
+                post_key("S", "S continue moving sweep box below screen", PHASE_WAIT_OFFSCREEN_BOTTOM)
+            end
+        elseif frame > deadline then
+            fail(string.format(
+                "S did not move sweep offset to %02X, got %02X",
+                offscreen_target,
+                read_byte(CAL_SWEEP_OFFSET)))
+        end
+    elseif phase == PHASE_WAIT_OFFSCREEN_TOP then
+        if read_byte(CAL_SWEEP_OFFSET) == offscreen_target then
+            if offscreen_target == 0xA0 then
+                local background = sample_cg3_background("sweep-offscreen-top")
+                if background then
+                    print(string.format(
+                        "MC-10 pixels: sweep top offscreen pass offset=%02X y=%02X",
+                        read_byte(CAL_SWEEP_OFFSET),
+                        read_byte(CAL_RECT_Y)))
+                    post_key("{P}", "P resume sweep", PHASE_WAIT_RESUME)
+                elseif frame > deadline then
+                    fail("sweep box remained visible at the upper offscreen limit")
+                end
+            else
+                offscreen_target = (read_byte(CAL_SWEEP_OFFSET) - 4) % 0x100
+                post_key("W", "W continue moving sweep box above screen", PHASE_WAIT_OFFSCREEN_TOP)
+            end
+        elseif frame > deadline then
+            fail(string.format(
+                "W did not move sweep offset to %02X, got %02X",
+                offscreen_target,
                 read_byte(CAL_SWEEP_OFFSET)))
         end
     elseif phase == PHASE_WAIT_RESUME then

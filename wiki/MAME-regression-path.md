@@ -39,7 +39,7 @@ the same cassette transfer, then verifies the timing calibrator's rendered
 state machine instead of stopping at the first alpha-panel snapshot. The
 harness checks the default manual band, alpha mode, raster-drift mode,
 phase-sweep mode, pause/resume, sweep-box height decrease/increase, vertical
-movement, and the return to manual mode. It compares rendered pixel buffers to
+movement, both off-screen directions, and the return to manual mode. It compares rendered pixel buffers to
 require motion in both active modes and zero change while the sweep is paused.
 
 ```text
@@ -54,8 +54,8 @@ mame.exe mc10 -noreadconfig -ramsize 20K \
 ```
 
 The expected result is `MC-10 calibrator regression: PASS`. The harness writes
-manual, alpha, drift, sweep, pause, resize, and vertical-movement PNG captures
-under `build/mame-snapshots/`. The current MAME screen API
+manual, alpha, drift, sweep, pause, resize, vertical-movement, and off-screen
+PNG captures under `build/mame-snapshots/`. The current MAME screen API
 reports a 372x243 image for this machine; the harness applies color thresholds
 to the active 256x192 MC-10 surface and does not count the MAME border as
 video evidence. This is a rendered-emulator regression, not a measurement of

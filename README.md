@@ -187,8 +187,8 @@ loader commands, starts the mounted cassette, waits for the complete transfer,
 posts `EXEC`, verifies the default manual band, cycles alpha, raster-drift, and
 phase-sweep modes, and checks the rendered pixels after each transition. It
 also compares two frames for motion, compares two paused frames for zero
-change, verifies sweep-box height decrease/increase and vertical movement, and
-verifies the final return to manual mode.
+change, verifies sweep-box height decrease/increase, vertical movement, both
+off-screen directions, and the final return to manual mode.
 
 Build the calibrator, then run the harness from PowerShell. The ROM path below
 uses the MC-10 ROM supplied by the template checkout and the MAME ROM directory:
@@ -220,7 +220,10 @@ under
 but render thresholds are applied to the active 256x192 MC-10 video region;
 the surrounding MAME border is not counted as video evidence. The harness
 uses MAME's `{ENTER}` and `{P}` key codes. In sweep mode, pause with `P` before
-using `A`/`D` to resize the box or `W`/`S` to move it. Literal text such as `\n` or
+using `A`/`D` to resize the box or `W`/`S` to move it. The harness also writes
+`mame-calibrator-sweep-offscreen-bottom.png` and
+`mame-calibrator-sweep-offscreen-top.png` after verifying that the box can
+leave the video surface without writing red pixels. Literal text such as `\n` or
 `SPACE` is not substituted for those emulated keys.
 
 This is an emulator-render regression, not proof of physical MC6847 `FS`

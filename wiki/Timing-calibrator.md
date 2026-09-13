@@ -44,8 +44,8 @@ and the P2.0 marker.
 The mode order is manual band, alpha values, raster drift, and phase sweep.
 Pause with `P` before changing sweep geometry when examining one fixed phase
 candidate. In sweep mode, the box height is clamped to 4-48 CG3 rows and its
-vertical bias to -48 through +48 rows. The renderer clamps the final box origin
-so the complete box remains inside the 96-row logical CG3 surface.
+vertical bias to -96 through +96 rows. The renderer clips rows outside the
+96-row logical CG3 surface, so the box can be moved completely offscreen.
 
 ## Geometry experiment
 
@@ -59,9 +59,11 @@ the vertical extent of a usable interval:
 5. Press `P` to resume the sweep, or press `M` to return to the manual band.
 
 A height that can be enlarged without visible disruption indicates more
-vertical time is available at that phase. If only one screen position works,
-the interval is position-dependent. These are visual diagnostics, not a
-hardware page flip, FS detector, or automatic vblank synchronizer.
+vertical time is available at that phase. Moving the box completely above or
+below the visible picture exposes the unrepresented portion of the cycle. If
+only one screen position works, the interval is position-dependent. These are
+visual diagnostics, not a hardware page flip, FS detector, or automatic vblank
+synchronizer.
 
 ## Automated check
 
