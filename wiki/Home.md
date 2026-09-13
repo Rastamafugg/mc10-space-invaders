@@ -17,6 +17,7 @@ This wiki is the persistent operational record for the bare-metal MC6803 game pr
 - MCX-128 bank-map and eight-bank diagnostic code exists.
 - The timing calibrator uses MC6803 timer compare events and a P2.0 marker.
 - The MAME 0.289 automated cassette path now waits for the full tape image before posting `EXEC{ENTER}` and reaches the calibrator screen.
+- The MAME `environment-test` cassette reaches `TIMER: OK`; the capture also shows the expected `MCX128 ERROR !` on a bare MC-10 configuration.
 - Physical MCX-128 behavior and MC6847 FS timing remain hardware-validation items.
 
 ## Repository references

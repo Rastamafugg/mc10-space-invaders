@@ -46,6 +46,8 @@ The corrected script waited until the tape reached `55.54/55.77` seconds and pos
 
 The calibrator alpha screen uses the title `FS TIMING CALIBRATOR`; it does not display the separate `TIMER: OK` label. Use the environment-test image when that exact status text is required.
 
+The verified environment-test capture is `build/mame-snapshots/environment-mame289.png`. It shows `MCX128 ERROR !` followed by `TIMER: OK`, confirming that the program continues past the expected absent-MCX diagnostic and completes the timer test.
+
 ## Expected evidence
 
 - Log contains `CLOADM{ENTER}`, cassette playback, and `EXEC{ENTER}`.

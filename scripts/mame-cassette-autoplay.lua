@@ -80,7 +80,7 @@ frame_subscription = emu.add_machine_frame_notifier(function()
     end
 
     if exec_sent and not captured and frame >= SNAPSHOT_FRAME then
-        local error_message = screen:snapshot("timer-mame289.png")
+        local error_message = screen:snapshot()
         captured = true
         print(string.format("MC-10 cassette: SNAPSHOT at frame %d (%s)", frame, tostring(error_message)))
     end
