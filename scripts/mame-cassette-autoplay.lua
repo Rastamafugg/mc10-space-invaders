@@ -16,8 +16,10 @@ local exec_sent = false
 local captured = false
 
 local EXEC_MIN_FRAME = 2400
-local EXEC_TIMEOUT_FRAME = 4200
+local EXEC_TIMEOUT_FRAME = 7200
+local TAPE_SETTLE_FRAMES = 30
 local SNAPSHOT_FRAME = 4800
+local tape_end_frame = nil
 
 assert(cassette, "MC-10 cassette device not found")
 assert(screen, "MC-10 screen device not found")
@@ -62,12 +64,17 @@ frame_subscription = emu.add_machine_frame_notifier(function()
     end
 
     -- The cassette image contains a machine-language load.  CLOADM returns
-    -- to BASIC after the transfer; EXEC is required to enter the image.  The
-    -- image contains a long leader and trailer, so a fixed early delay can
-    -- post EXEC while the loader is still active.
+    -- to BASIC after the transfer; EXEC is required to enter the image.  Do
+    -- not use a short fixed delay because the game cassette is longer than
+    -- the original diagnostic image.
     local tape_at_end = cassette.length > 0 and cassette.position >= cassette.length - 0.25
+    if started and not exec_sent and tape_at_end and not tape_end_frame then
+        tape_end_frame = frame
+        print(string.format("MC-10 cassette: end detected at frame %d", frame))
+    end
+    local end_settled = tape_end_frame and frame >= tape_end_frame + TAPE_SETTLE_FRAMES
     local exec_timeout = frame >= EXEC_TIMEOUT_FRAME
-    if started and not exec_sent and frame >= EXEC_MIN_FRAME and (tape_at_end or exec_timeout) then
+    if started and not exec_sent and frame >= EXEC_MIN_FRAME and (end_settled or exec_timeout) then
         trace_state("before-exec")
         cassette:stop()
         keyboard:post_coded("EXEC{ENTER}")

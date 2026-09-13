@@ -283,6 +283,27 @@ The game workspace is at `$4C00-$4C5A`, immediately after
 the visible `$4000-$4BFF` CG3 surface, because `$0100-$015A` is not portable
 MC-10 RAM in MAME.
 
+### Manual MAME play
+
+Use `mame-manual-play.ps1` for an interactive session. It builds the current
+game cassette unless `-SkipBuild` is supplied, mounts it in MAME, posts
+`CLOADM{ENTER}`, starts the cassette, waits for the actual end of the image plus
+30 emulated frames, posts `EXEC{ENTER}`, and leaves MAME open. MAME runs at the
+requested accelerated load speed, which defaults to 4x, then the Lua script
+restores normal-speed throttling when the game loop reaches `$502C-$503B`.
+
+```powershell
+.\mame-manual-play.ps1
+```
+
+The main parameters are `-LoadSpeed 4`, `-MamePath`, `-RomPath`, and
+`-SkipBuild`. The defaults use `E:\tools\mame0289-bin\mame.exe` and the local
+ROM directories used by this project; set `MC10_MAME` and
+`MC10_MAME_ROMPATH` for another installation. During play, `A` and `D` move,
+Space fires, and Space restarts after game over. The loader must wait for the
+current cassette's end position; posting `EXEC` at a shorter fixed timeout
+leaves the MC-10 in its cassette search state.
+
 ## Current test program
 
 `src/main.s` is the CG3 game target. It selects 128×96 two-bit graphics with

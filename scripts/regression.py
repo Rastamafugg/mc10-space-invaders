@@ -290,6 +290,53 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
             + ", ".join(missing_mame_game_harness_tokens)
         )
 
+    manual_lua = root / "scripts" / "mame-manual-play.lua"
+    if not manual_lua.is_file():
+        fail(f"missing MAME manual-play Lua script: {manual_lua}")
+    manual_lua_text = manual_lua.read_text(encoding="ascii")
+    manual_lua_tokens = (
+        'keyboard:post_coded("CLOADM{ENTER}")',
+        'keyboard:post_coded("EXEC{ENTER}")',
+        "cassette:play()",
+        "cassette:stop()",
+        "TAPE_SETTLE_FRAMES",
+        "LOAD_TIMEOUT_FRAME",
+        "video.throttle_rate",
+        "video.throttled",
+        "game_main_loop_active",
+        "normal speed restored",
+    )
+    missing_manual_lua_tokens = [
+        token for token in manual_lua_tokens if token not in manual_lua_text
+    ]
+    if missing_manual_lua_tokens:
+        fail(
+            "MAME manual-play Lua script is missing markers: "
+            + ", ".join(missing_manual_lua_tokens)
+        )
+
+    manual_launcher = root / "mame-manual-play.ps1"
+    if not manual_launcher.is_file():
+        fail(f"missing MAME manual-play launcher: {manual_launcher}")
+    manual_launcher_text = manual_launcher.read_text(encoding="ascii")
+    manual_launcher_tokens = (
+        "mame-manual-play.lua",
+        "LoadSpeed",
+        "-autoboot_script",
+        "-speed",
+        "-throttle",
+        "-cass",
+        "-ramsize",
+    )
+    missing_manual_launcher_tokens = [
+        token for token in manual_launcher_tokens if token not in manual_launcher_text
+    ]
+    if missing_manual_launcher_tokens:
+        fail(
+            "MAME manual-play launcher is missing markers: "
+            + ", ".join(missing_manual_launcher_tokens)
+        )
+
     game_source = root / "src" / "main.s"
     game_text = game_source.read_text(encoding="ascii")
     game_tokens = (
@@ -335,6 +382,7 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     print("regression: live timing calibrator markers present")
     print("regression: MAME Lua pixel harness markers present")
     print("regression: MAME Lua game harness markers present")
+    print("regression: MAME manual-play launcher markers present")
     print("regression: CG3 game layout and gameplay markers present")
 
 

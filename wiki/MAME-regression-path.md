@@ -116,6 +116,24 @@ The game workspace is `$4C00-$4C5A`, after the visible `$4000-$4BFF` CG3
 surface. The relocation is necessary because MAME does not provide portable
 RAM for the prior `$0100-$015A` workspace range.
 
+## Manual game launcher
+
+`mame-manual-play.ps1` starts an interactive Space Invaders session. It builds
+the cassette, posts `CLOADM{ENTER}`, starts the cassette, waits for the actual
+end of the cassette image and a 30-frame settle interval, posts `EXEC{ENTER}`,
+and leaves MAME running. It supplies `-speed 4` by default for the load, then
+`scripts/mame-manual-play.lua` restores normal-speed throttling when the game
+loop reaches `$502C-$503B`.
+
+```powershell
+.\mame-manual-play.ps1
+```
+
+Use `-LoadSpeed`, `-MamePath`, `-RomPath`, or `-SkipBuild` to override the
+defaults. A previous fixed `EXEC` timeout of frame 4200 was too short for the
+current game cassette, which explains the frozen cassette-search screen. The
+manual launcher waits for the cassette position to reach its end instead.
+
 ## Investigation result
 
 The initial script posted `EXEC{ENTER}` at frame 2400, when the trace showed:
