@@ -227,6 +227,33 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
             + ", ".join(missing_mame_harness_tokens)
         )
 
+    mame_game_harness = root / "scripts" / "mame-game-regression.lua"
+    if not mame_game_harness.is_file():
+        fail(f"missing MAME Lua game harness: {mame_game_harness}")
+    mame_game_harness_text = mame_game_harness.read_text(encoding="ascii")
+    mame_game_harness_tokens = (
+        'keyboard:post_coded("CLOADM{ENTER}")',
+        'keyboard:post_coded("EXEC{ENTER}")',
+        "cassette:play()",
+        "screen:pixels()",
+        "screen:pixel(",
+        'screen:snapshot("mame-game-initial.png")',
+        "GAME_FRAME",
+        "GAME_LIVES",
+        "GAME_SHIELDS_ACTIVE",
+        "ALIEN_LIVE",
+        "game_main_loop_active",
+        "MC-10 game regression: PASS",
+    )
+    missing_mame_game_harness_tokens = [
+        token for token in mame_game_harness_tokens if token not in mame_game_harness_text
+    ]
+    if missing_mame_game_harness_tokens:
+        fail(
+            "MAME Lua game harness is missing regression markers: "
+            + ", ".join(missing_mame_game_harness_tokens)
+        )
+
     game_source = root / "src" / "main.s"
     game_text = game_source.read_text(encoding="ascii")
     game_tokens = (
@@ -246,6 +273,9 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
         "FORMATION_NEW_ANIM",
         "game_update_formation_row",
         "BACKGROUND_COLOR",
+        "ALIEN_LIVE",
+        "$4C00",
+        "$4C5A",
     )
     missing_game_tokens = [token for token in game_tokens if token not in game_text]
     if missing_game_tokens:
@@ -261,6 +291,7 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     print("regression: source covers all eight MCX bank signatures")
     print("regression: live timing calibrator markers present")
     print("regression: MAME Lua pixel harness markers present")
+    print("regression: MAME Lua game harness markers present")
     print("regression: CG3 game layout and gameplay markers present")
 
 

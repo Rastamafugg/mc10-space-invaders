@@ -64,40 +64,43 @@ GAME_TICK       EQU     $00FD       ; formation redraw pending
 GAME_TEMP       EQU     $00FE
 GAME_TEMP2      EQU     $00FF
 
-; Extended working storage in unused MC-10 RAM.
-ALIEN_LIVE      EQU     $0100       ; 5 rows x 11 columns, one byte each
-WORK_SPRITE     EQU     $0138       ; 16-bit sprite pointer
-WORK_ADDR       EQU     $013A       ; 16-bit current screen address
-WORK_ROW_PTR    EQU     $013C       ; 16-bit live-array pointer
-WORK_SHAPE      EQU     $013E
-WORK_COLOR_BASE EQU     $013F
-WORK_COLOR_RESULT EQU   $0140
-WORK_WIDTH      EQU     $0141
-WORK_HEIGHT     EQU     $0142
-WORK_COL        EQU     $0143
-WORK_ROW        EQU     $0144
-WORK_XBYTE      EQU     $0145
-WORK_Y         EQU      $0146
-WORK_TYPE       EQU     $0147
-WORK_DIGIT      EQU     $0148
-WORK_TEMP       EQU      $0149
-WORK_TEMP2      EQU     $014A
-PLOT_X          EQU     $014B
-PLOT_Y          EQU     $014C
-PLOT_COLOR      EQU     $014D
-PLOT_BYTE       EQU     $014E
-PLOT_SHIFT      EQU     $014F
-PLOT_MASK       EQU     $0150
-PLOT_ENCODED    EQU     $0151
-WORK_COLOR      EQU     $0152
-FORMATION_BUSY  EQU     $0153       ; formation translation has rows pending
-FORMATION_ROW   EQU     $0154       ; next row to erase and redraw
-FORMATION_OLD_X EQU     $0155       ; previous formation pixel X
-FORMATION_OLD_Y EQU     $0156       ; previous formation top Y
-FORMATION_OLD_ANIM EQU  $0157       ; sprite frame at previous position
-FORMATION_NEW_ANIM EQU  $0158       ; sprite frame at current position
-FORMATION_SAVE_X EQU     $0159      ; temporary formation X during reset
-FORMATION_SAVE_Y EQU     $015A      ; temporary formation Y during reset
+; Extended working storage follows the 3 KiB CG3 surface. The MC6803
+; direct-page RAM ends before $0100; addresses $0100-$015A are not portable
+; MC-10 RAM and are unmapped by MAME. $4C00 is outside the visible
+; $4000-$4BFF video surface and is present in the base 4 KiB RAM window.
+ALIEN_LIVE      EQU     $4C00       ; 5 rows x 11 columns, one byte each
+WORK_SPRITE     EQU     $4C38       ; 16-bit sprite pointer
+WORK_ADDR       EQU     $4C3A       ; 16-bit current screen address
+WORK_ROW_PTR    EQU     $4C3C       ; 16-bit live-array pointer
+WORK_SHAPE      EQU     $4C3E
+WORK_COLOR_BASE EQU     $4C3F
+WORK_COLOR_RESULT EQU   $4C40
+WORK_WIDTH      EQU     $4C41
+WORK_HEIGHT     EQU     $4C42
+WORK_COL        EQU     $4C43
+WORK_ROW        EQU     $4C44
+WORK_XBYTE      EQU     $4C45
+WORK_Y         EQU      $4C46
+WORK_TYPE       EQU     $4C47
+WORK_DIGIT      EQU     $4C48
+WORK_TEMP       EQU      $4C49
+WORK_TEMP2      EQU     $4C4A
+PLOT_X          EQU     $4C4B
+PLOT_Y          EQU     $4C4C
+PLOT_COLOR      EQU     $4C4D
+PLOT_BYTE       EQU     $4C4E
+PLOT_SHIFT      EQU     $4C4F
+PLOT_MASK       EQU     $4C50
+PLOT_ENCODED    EQU     $4C51
+WORK_COLOR      EQU     $4C52
+FORMATION_BUSY  EQU     $4C53       ; formation translation has rows pending
+FORMATION_ROW   EQU     $4C54       ; next row to erase and redraw
+FORMATION_OLD_X EQU     $4C55       ; previous formation pixel X
+FORMATION_OLD_Y EQU     $4C56       ; previous formation top Y
+FORMATION_OLD_ANIM EQU  $4C57       ; sprite frame at previous position
+FORMATION_NEW_ANIM EQU  $4C58       ; sprite frame at current position
+FORMATION_SAVE_X EQU     $4C59      ; temporary formation X during reset
+FORMATION_SAVE_Y EQU     $4C5A      ; temporary formation Y during reset
 
         *       = $5000
 

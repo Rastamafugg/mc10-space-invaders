@@ -35,6 +35,12 @@ display RAM. The initial formation y-coordinate and its seven-pixel row spacing
 leave that scanline clear. Each update masks interrupts while drawing and
 reinstalls the vector after any video-RAM writes.
 
+The direct-page game state occupies `$00E0-$00FF`. The alien live table and
+renderer workspace occupy `$4C00-$4C5A`, immediately after the visible CG3
+surface. This placement is required because the MC-10 CPU-resident direct-page
+RAM does not provide portable storage at `$0100-$015A`; MAME leaves that range
+unmapped while its configurable RAM device begins at `$4000`.
+
 ## MCX-128 staging and frame transfer
 
 The documented MCX-128 map can provide a CPU-side shadow surface without

@@ -63,6 +63,36 @@ to the active 256x192 MC-10 surface and does not count the MAME border as
 video evidence. This is a rendered-emulator regression, not a measurement of
 the physical MC6847 `FS` signal.
 
+## Space Invaders initial-screen harness
+
+The game-specific harness is `scripts/mame-game-regression.lua`. It loads
+`space-invaders.c10`, waits for the cassette to finish, posts `EXEC{ENTER}`
+and waits until the game main loop is active. It then checks game state and
+pixels for the opening screen: zero score, three lives, 55 live aliens,
+shields, the blue CG3 surface, five colored alien rows, the player ship, and
+the bottom HUD.
+
+```text
+mame.exe mc10 -noreadconfig -ramsize 20K \
+  -rompath "E:\path\to\ladybug\roms;E:\path\to\mame\roms" \
+  -cass "E:\path\to\build\space-invaders.c10" \
+  -autoboot_delay 2 \
+  -autoboot_script "E:\path\to\scripts\mame-game-regression.lua" \
+  -seconds_to_run 150 \
+  -snapshot_directory "E:\path\to\build\mame-snapshots" \
+  -window -nothrottle
+```
+
+The expected result is `MC-10 game regression: PASS`, with
+`mame-game-initial.png` in the snapshot directory. The harness analyzes the
+active 256x192 surface inside MAME's 372x243 screen capture and ignores the
+border. It verifies the opening render after initialization, not the later
+gameplay rules or physical MC6847 `FS` phase.
+
+The game workspace is `$4C00-$4C5A`, after the visible `$4000-$4BFF` CG3
+surface. The relocation is necessary because MAME does not provide portable
+RAM for the prior `$0100-$015A` workspace range.
+
 ## Investigation result
 
 The initial script posted `EXEC{ENTER}` at frame 2400, when the trace showed:

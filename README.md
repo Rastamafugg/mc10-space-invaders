@@ -218,6 +218,39 @@ This is an emulator-render regression, not proof of physical MC6847 `FS`
 phase. For the distinction between timer cadence, rendered pixels, and a
 physical signal measurement, see [the timer-compare procedure](docs/timer-compare-test.md#mame-lua-pixel-harness).
 
+### MAME Lua game harness
+
+The game-specific harness is `scripts/mame-game-regression.lua`. It uses the
+same cassette and `EXEC` sequence, then waits until the program is executing
+its game loop. It reads the initialized game state and analyzes the rendered
+screen, checking the zero score, three lives, player and formation positions,
+all 55 live alien entries, active shields, blue CG3 background, five colored
+alien rows, shield structures, player ship, and bottom HUD. It saves the proof
+image as `build/mame-snapshots/mame-game-initial.png` and prints
+`MC-10 game regression: PASS`.
+
+Run it after rebuilding the game:
+
+```powershell
+.\space-invaders.ps1 build
+$mc10Mame = 'E:\tools\mame0289-bin\mame.exe'
+$mc10RomPath = 'E:\projects\ladybug\web\docker\roms;E:\tools\mame0289-bin\roms'
+& $mc10Mame mc10 -noreadconfig -ramsize 20K -rompath $mc10RomPath `
+  -cass 'E:\projects\mc10-space-invaders\build\space-invaders.c10' `
+  -autoboot_delay 2 `
+  -autoboot_script 'E:\projects\mc10-space-invaders\scripts\mame-game-regression.lua' `
+  -seconds_to_run 150 `
+  -snapshot_directory 'E:\projects\mc10-space-invaders\build\mame-snapshots' `
+  -window -nothrottle
+```
+
+The harness checks the active 256x192 MC-10 video surface in MAME's 372x243
+capture and ignores the surrounding border. It validates the opening game
+render after initialization has reached the main loop; normal simulation is
+not a gameplay test. The game workspace is at `$4C00-$4C5A`, immediately after
+the visible `$4000-$4BFF` CG3 surface, because `$0100-$015A` is not portable
+MC-10 RAM in MAME.
+
 ## Current test program
 
 `src/main.s` is the CG3 game target. It selects 128×96 two-bit graphics with
