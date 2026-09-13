@@ -21,9 +21,12 @@ Build and start the program with:
 ```
 
 The initial screen is a blue CG3 surface with a full-width green band near the
-upper edge. Use `W` to move the band upward and `S` to move it downward. Move
-the band through the visible display and just beyond an edge. The disappearance
-boundary is the visual candidate for the render-safe interval.
+upper edge. Use `W` to move the band upward and `S` to move it downward. The
+manual band wraps: continuing upward from the top offscreen position brings it
+back at the bottom, and continuing downward from the bottom offscreen position
+brings it back at the top. Move the band through the visible display and just
+beyond an edge. The disappearance boundary is the visual candidate for the
+render-safe interval.
 
 Press `M` once to enter the alpha panel and record `PERIOD` and `PHASE`. Copy
 those values to `TIMER_PERIOD` and `TIMER_PHASE` in `src/main.s`. Press `R` to
@@ -42,6 +45,10 @@ and the P2.0 marker.
 | `P` | No action | No action | Pause or resume sweep |
 
 The mode order is manual band, alpha values, raster drift, and phase sweep.
+The default manual mode uses `A` and `D` for timer-period adjustment, which is
+reported in the alpha panel and does not visibly resize the band. `P` has no
+effect outside phase-sweep mode. Press `M` three times from the default screen
+and confirm `MODE: SWEEP` before using `P`, `A`, or `D` for the sweep controls.
 Pause with `P` before changing sweep geometry when examining one fixed phase
 candidate. In sweep mode, the box height is clamped to 4-48 CG3 rows and its
 vertical bias to -96 through +96 rows. The renderer clips rows outside the

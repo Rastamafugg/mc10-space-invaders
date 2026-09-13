@@ -52,10 +52,12 @@ Build and launch it on a stock XRoar MC-10 with:
 This path does not require the MCX-128 ROM. The initial screen is the default
 manual workflow: a blue CG3 surface with a full-width green band near the top.
 The purpose of this mode is to locate the usable blank interval visually. Press
-`W` to move the band upward and `S` to move it downward. Continue until the
-band is just outside the visible picture, then record the current candidate
-phase using the alpha panel. The value shown in `PHASE` is a signed
-two's-complement E-clock offset.
+`W` to move the band upward and `S` to move it downward. The manual band wraps
+continuously: after leaving the top it re-enters at the bottom when continuing
+upward, and after leaving the bottom it re-enters at the top when continuing
+downward. Continue until the band is just outside the visible picture, then
+record the current candidate phase using the alpha panel. The value shown in
+`PHASE` is a signed two's-complement E-clock offset.
 
 Use the result as follows:
 
@@ -66,6 +68,12 @@ Use the result as follows:
 3. Press `M` once to enter the alpha panel and record `PERIOD` and `PHASE`.
 4. Copy those values into `TIMER_PERIOD` and `TIMER_PHASE` in `src/main.s`.
 5. Press `R` after a large period or phase change to re-anchor the next compare.
+
+In manual mode, `A` and `D` adjust the timer period by one E clock. They do not
+resize the visible band. `P` has no effect in manual, alpha, or drift mode. To
+use the sweep-specific controls, press `M` three times from the default screen
+and confirm `MODE: SWEEP`; then pause with `P` before changing the box with
+`A`/`D` or moving it with `W`/`S`.
 
 The band is the primary operator workflow because its full width makes the
 visible boundary easy to identify. It does not claim that software has detected

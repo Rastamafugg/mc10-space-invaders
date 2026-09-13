@@ -219,8 +219,10 @@ under
 `build/mame-snapshots/`. Pixel classification covers the full MAME capture,
 but render thresholds are applied to the active 256x192 MC-10 video region;
 the surrounding MAME border is not counted as video evidence. The harness
-uses MAME's `{ENTER}` and `{P}` key codes. In sweep mode, pause with `P` before
-using `A`/`D` to resize the box or `W`/`S` to move it. The harness also writes
+uses MAME's `{ENTER}` and `{P}` key codes. The manual-band check also verifies
+that repeated `W` presses wrap from the top offscreen position to the bottom
+and reappear. In sweep mode, pause with `P` before using `A`/`D` to resize the
+box or `W`/`S` to move it. The harness also writes
 `mame-calibrator-sweep-offscreen-bottom.png` and
 `mame-calibrator-sweep-offscreen-top.png` after verifying that the box can
 leave the video surface without writing red pixels. Literal text such as `\n` or

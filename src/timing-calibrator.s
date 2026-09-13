@@ -50,6 +50,8 @@ CAL_RECT_SKIP   EQU     $001C           ; 32-byte line minus four bytes
 CAL_DRIFT_STEP  EQU     $04
 CAL_BAND_HEIGHT EQU     $04             ; full-width manual calibration band
 CAL_MANUAL_PHASE_STEP EQU $0270         ; about 1/24 field per W/S press
+CAL_MANUAL_TOP_OFFSCREEN EQU $FC        ; -4, one band height above row 0
+CAL_MANUAL_BOTTOM_OFFSCREEN EQU $60     ; row 96, immediately below surface
 CAL_SWEEP_STEP  EQU     $0040
 CAL_SWEEP_HOLD_FRAMES EQU $08
 CAL_SWEEP_START EQU     $E2D5           ; -$1D2B, half a modeled field
@@ -280,20 +282,13 @@ cal_key_w_manual = *
         SUBD    #CAL_MANUAL_PHASE_STEP
         STD     CAL_PHASE_H
         LDAA    CAL_RECT_Y
-        CMPA    #$FC
-        BCC     cal_key_w_manual_top
-        CMPA    #$60
-        BCS     cal_key_w_manual_visible
-        LDAA    #$5C                    ; recover from the lower offscreen edge
+        CMPA    #CAL_MANUAL_TOP_OFFSCREEN
+        BEQ     cal_key_w_manual_wrap
+        SUBA    #CAL_BAND_HEIGHT
         BRA     cal_key_w_manual_store
-cal_key_w_manual_visible = *
-        SUBA    #$04
+cal_key_w_manual_wrap = *
+        LDAA    #CAL_MANUAL_BOTTOM_OFFSCREEN
 cal_key_w_manual_store = *
-        STAA    CAL_RECT_Y
-        JSR     cal_adjusted
-        BRA     cal_key_s
-cal_key_w_manual_top = *
-        LDAA    #$FC                    ; hold at the upper offscreen edge
         STAA    CAL_RECT_Y
         JSR     cal_adjusted
         BRA     cal_key_s
@@ -341,14 +336,13 @@ cal_key_s_manual = *
         ADDD    #CAL_MANUAL_PHASE_STEP
         STD     CAL_PHASE_H
         LDAA    CAL_RECT_Y
-        CMPA    #$FC
-        BCC     cal_key_s_manual_top
-        ADDA    #$04
-        STAA    CAL_RECT_Y
-        JSR     cal_adjusted
-        BRA     cal_key_r
-cal_key_s_manual_top = *
-        CLRA                            ; recover from the upper offscreen edge
+        CMPA    #CAL_MANUAL_BOTTOM_OFFSCREEN
+        BEQ     cal_key_s_manual_wrap
+        ADDA    #CAL_BAND_HEIGHT
+        BRA     cal_key_s_manual_store
+cal_key_s_manual_wrap = *
+        LDAA    #CAL_MANUAL_TOP_OFFSCREEN
+cal_key_s_manual_store = *
         STAA    CAL_RECT_Y
         JSR     cal_adjusted
         BRA     cal_key_r
@@ -598,8 +592,10 @@ cal_clear_cg3_page_again = *
         BNE     cal_clear_cg3_pages
         RTS
 
-; Draw a full-width horizontal band. CAL_RECT_Y is an unsigned visual
-; coordinate; values $60-$FF are intentionally offscreen and draw nothing.
+; Draw a full-width horizontal band. CAL_RECT_Y is a wrapped manual visual
+; coordinate: rows $00-$5F are visible, $60 is immediately below the 96-row
+; surface, and $FC is one band height above row 0. Other offscreen values draw
+; nothing. Manual movement explicitly wraps between $FC and $60.
 cal_draw_band = *
         LDAA    CAL_RECT_Y
         CMPA    #$60
@@ -1099,15 +1095,15 @@ cal_mode_drift = *
 cal_mode_sweep = *
         DB      $0D,$0F,$04,$05,$3A,$20,$13,$17,$05,$05,$10
 cal_manual_help = *
-        DB      $17,$2F,$13,$20,$0D,$0F,$16,$05,$20,$02,$01,$0E,$04,$20,$20
+        DB      $17,$2F,$13,$20,$0D,$0F,$16,$05,$20,$0D,$20,$0D,$0F,$04,$05
 cal_sweep_help = *
-        DB      $01,$2F,$04,$20,$13,$09,$1A,$05,$20,$17,$2F,$13,$20,$19,$20
+        DB      $01,$2F,$04,$20,$10,$05,$12,$09,$0F,$04,$20,$17,$2F,$13,$20
 cal_alpha_help = *
         DB      $01,$2F,$04,$20,$10,$05,$12,$09,$0F,$04,$20,$17,$2F,$13,$20
 cal_sweep_run = *
-        DB      $13,$17,$05,$05,$10,$3A,$20,$12,$15,$0E,$20,$20,$20,$20,$20
+        DB      $10,$20,$10,$01,$21,$19,$05,$20,$01,$2F,$04,$20,$13,$26,$20
 cal_sweep_stop = *
-        DB      $13,$17,$05,$05,$10,$3A,$20,$13,$14,$0F,$10,$20,$20,$20,$20
+        DB      $10,$20,$12,$05,$19,$21,$13,$05,$20,$01,$2F,$04,$20,$13,$26
 cal_controls_1 = *
         DB      $01,$2F,$04,$20,$10,$05,$12,$09,$0F,$04,$20,$20,$17,$2F,$13,$20,$01,$04,$10,$15,$13,$14
 cal_controls_2 = *

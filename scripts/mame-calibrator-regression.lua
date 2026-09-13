@@ -66,6 +66,9 @@ local PHASE_WAIT_OFFSCREEN_TOP = 17
 local PHASE_WAIT_RESUME = 18
 local PHASE_WAIT_RETURN_MANUAL = 19
 local PHASE_DONE = 20
+local PHASE_WAIT_MANUAL_WRAP_TOP = 21
+local PHASE_WAIT_MANUAL_WRAP_BOTTOM = 22
+local PHASE_WAIT_MANUAL_WRAP_REAPPEAR = 23
 
 assert(cassette, "MC-10 cassette device not found")
 assert(screen, "MC-10 screen device not found")
@@ -89,6 +92,7 @@ local paused_height = nil
 local paused_offset = nil
 local paused_sweep_y = nil
 local offscreen_target = nil
+local manual_wrap_expected = nil
 local failed = false
 local tape_end_frame = nil
 
@@ -457,7 +461,52 @@ frame_subscription = emu.add_machine_frame_notifier(function()
                 delta,
                 read_byte(CAL_RECT_Y),
                 manual_second and "" or " screen-RAM-verified"))
-            post_key("M", "M to alpha values", PHASE_WAIT_ALPHA)
+            manual_wrap_expected = (read_byte(CAL_RECT_Y) - 4) % 0x100
+            post_key("W", "W continue manual band toward top wrap", PHASE_WAIT_MANUAL_WRAP_TOP)
+        end
+    elseif phase == PHASE_WAIT_MANUAL_WRAP_TOP then
+        if read_byte(CAL_RECT_Y) == manual_wrap_expected then
+            if manual_wrap_expected == 0xFC then
+                manual_wrap_expected = 0x60
+                post_key("W", "W wrap manual band to bottom offscreen", PHASE_WAIT_MANUAL_WRAP_BOTTOM)
+            else
+                manual_wrap_expected = (manual_wrap_expected - 4) % 0x100
+                post_key("W", "W continue manual band toward top wrap", PHASE_WAIT_MANUAL_WRAP_TOP)
+            end
+        elseif frame > deadline then
+            fail(string.format(
+                "W did not move manual band to %02X, got %02X",
+                manual_wrap_expected,
+                read_byte(CAL_RECT_Y)))
+        end
+    elseif phase == PHASE_WAIT_MANUAL_WRAP_BOTTOM then
+        if read_byte(CAL_RECT_Y) == manual_wrap_expected then
+            manual_wrap_expected = 0x5C
+            post_key("W", "W re-enter manual band from bottom", PHASE_WAIT_MANUAL_WRAP_REAPPEAR)
+        elseif frame > deadline then
+            fail(string.format(
+                "manual band did not wrap to bottom offscreen %02X, got %02X",
+                manual_wrap_expected,
+                read_byte(CAL_RECT_Y)))
+        end
+    elseif phase == PHASE_WAIT_MANUAL_WRAP_REAPPEAR then
+        if read_byte(CAL_RECT_Y) == manual_wrap_expected then
+            local wrapped = sample_manual("manual-wrap-reappear")
+            if wrapped or manual_band_memory_ready() then
+                print(string.format(
+                    "MC-10 pixels: manual band wrap pass top=%02X bottom=%02X reappear=%02X",
+                    0xFC,
+                    0x60,
+                    read_byte(CAL_RECT_Y)))
+                post_key("M", "M to alpha values", PHASE_WAIT_ALPHA)
+            elseif frame > deadline then
+                fail("manual band did not reappear after bottom wrap")
+            end
+        elseif frame > deadline then
+            fail(string.format(
+                "manual band did not reappear at %02X, got %02X",
+                manual_wrap_expected,
+                read_byte(CAL_RECT_Y)))
         end
     elseif phase == PHASE_WAIT_ALPHA then
         if frame >= ALPHA_FRAME then
