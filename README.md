@@ -12,6 +12,8 @@ lessons discovered during emulator testing.
 
 - WSL with the `crasm` cross-assembler, which supports MC6803, and Python 3. Ubuntu provides it as the `crasm` package. Set `MC10_ASM=/path/to/crasm` when it is not in `PATH`, or run `bash scripts/bootstrap_crasm.sh` to extract the package into the ignored `.tools` directory without root access.
 - XRoar with MC-10 support and an available `mc10.rom` firmware image.
+- MAME 0.289 or newer for the permanent Lua cassette and pixel harness. The
+  verified local binary is MAME 0.289.
 - Python 3 for cassette-image generation.
 
 An MCX-128 EPROM image is required for the physical module and for an XRoar
@@ -173,6 +175,48 @@ without WSLg, run the portable stages with:
 ```text
 python3 scripts/regression.py --skip-emulator
 ```
+
+### MAME Lua calibrator harness
+
+The repository includes `scripts/mame-calibrator-regression.lua`, a permanent
+MAME-side test for the cassette-loaded timing calibrator. It posts the MC-10
+loader commands, starts the mounted cassette, waits for the complete transfer,
+posts `EXEC`, cycles alpha, raster-drift, and phase-sweep modes, and checks the
+rendered pixels after each transition. It also compares two frames for motion,
+compares two paused frames for zero change, and verifies the final return to
+alpha mode.
+
+Build the calibrator, then run the harness from PowerShell. The ROM path below
+uses the MC-10 ROM supplied by the template checkout and the MAME ROM directory:
+
+```powershell
+.\space-invaders.ps1 calibrator
+$mc10Mame = 'E:\tools\mame0289-bin\mame.exe'
+$mc10RomPath = 'E:\projects\ladybug\web\docker\roms;E:\tools\mame0289-bin\roms'
+& $mc10Mame mc10 -noreadconfig -ramsize 20K -rompath $mc10RomPath `
+  -cass 'E:\projects\mc10-space-invaders\build\timing-calibrator.c10' `
+  -autoboot_delay 2 `
+  -autoboot_script 'E:\projects\mc10-space-invaders\scripts\mame-calibrator-regression.lua' `
+  -seconds_to_run 120 `
+  -snapshot_directory 'E:\projects\mc10-space-invaders\build\mame-snapshots' `
+  -window -nothrottle
+```
+
+The expected terminal result is `MC-10 calibrator regression: PASS`. The
+harness writes `mame-calibrator-alpha.png`, `mame-calibrator-drift-first.png`,
+`mame-calibrator-drift-second.png`, `mame-calibrator-sweep-first.png`,
+`mame-calibrator-sweep-second.png`, `mame-calibrator-paused-first.png`,
+`mame-calibrator-paused-second.png`, and `mame-calibrator-return-alpha.png`
+under
+`build/mame-snapshots/`. Pixel classification covers the full MAME capture,
+but render thresholds are applied to the active 256x192 MC-10 video region;
+the surrounding MAME border is not counted as video evidence. The harness
+uses MAME's `{ENTER}` and `{P}` key codes. Literal text such as `\n` or
+`SPACE` is not substituted for those emulated keys.
+
+This is an emulator-render regression, not proof of physical MC6847 `FS`
+phase. For the distinction between timer cadence, rendered pixels, and a
+physical signal measurement, see [the timer-compare procedure](docs/timer-compare-test.md#mame-lua-pixel-harness).
 
 ## Current test program
 

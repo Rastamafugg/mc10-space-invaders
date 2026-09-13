@@ -199,6 +199,34 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
             + ", ".join(missing_calibrator_tokens)
         )
 
+    mame_harness = root / "scripts" / "mame-calibrator-regression.lua"
+    if not mame_harness.is_file():
+        fail(f"missing MAME Lua calibrator harness: {mame_harness}")
+    mame_harness_text = mame_harness.read_text(encoding="ascii")
+    mame_harness_tokens = (
+        'keyboard:post_coded("CLOADM{ENTER}")',
+        'keyboard:post_coded("EXEC{ENTER}")',
+        "cassette:play()",
+        "screen:pixels()",
+        "screen:pixel(",
+        "screen:snapshot(",
+        "changed_pixels",
+        "PHASE_WAIT_ALPHA",
+        "PHASE_WAIT_DRIFT",
+        "PHASE_WAIT_SWEEP",
+        "PHASE_WAIT_PAUSE",
+        "machine:exit()",
+        "MC-10 calibrator regression: PASS",
+    )
+    missing_mame_harness_tokens = [
+        token for token in mame_harness_tokens if token not in mame_harness_text
+    ]
+    if missing_mame_harness_tokens:
+        fail(
+            "MAME Lua calibrator harness is missing regression markers: "
+            + ", ".join(missing_mame_harness_tokens)
+        )
+
     game_source = root / "src" / "main.s"
     game_text = game_source.read_text(encoding="ascii")
     game_tokens = (
@@ -232,6 +260,7 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     print("regression: cassette framing pass")
     print("regression: source covers all eight MCX bank signatures")
     print("regression: live timing calibrator markers present")
+    print("regression: MAME Lua pixel harness markers present")
     print("regression: CG3 game layout and gameplay markers present")
 
 

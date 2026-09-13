@@ -99,6 +99,36 @@ screen surface. The test therefore remains usable even when the sweep visits
 that scanline, but it is not a hardware page flip or a vertical-blank
 interrupt.
 
+### MAME Lua pixel harness
+
+`scripts/mame-calibrator-regression.lua` provides the repeatable emulator-side
+check for this three-mode visual behavior. It enters `CLOADM`, starts the
+mounted cassette, waits for the image to reach its end, enters `EXEC`, and then
+performs this sequence:
+
+1. Verify the alpha panel is green and contains no red or blue pixels.
+2. Press `M`, verify the blue CG3 surface and green drift witness, and require
+   a changed pixel buffer on the second sample.
+3. Press `M`, verify the blue CG3 surface and red sweep witness, and require a
+   changed pixel buffer on the second sample.
+4. Press `P`, require two identical pixel buffers while the sweep is paused,
+   press `P` again, and return with `M` to the alpha panel.
+
+Run it after `.\space-invaders.ps1 calibrator` using the command in the
+[README harness section](../README.md#mame-lua-calibrator-harness). The
+expected result is `MC-10 calibrator regression: PASS`, with eight named PNG
+captures in `build/mame-snapshots/`.
+
+The harness uses MAME's [natural keyboard API](https://docs.mamedev.org/luascript/ref-input.html),
+[cassette and screen APIs](https://docs.mamedev.org/luascript/ref-devices.html),
+and [CPU memory API](https://docs.mamedev.org/luascript/ref-mem.html). The
+memory reads synchronize the test with the program's mode state; the rendered
+pixel buffer is the visual assertion. MAME reports a `372x243` capture for
+this setup, so the harness requires the active 256x192 MC-10 surface and
+ignores the surrounding border for color thresholds. This verifies the
+emulator's screen output and state transitions. It does not prove the physical
+MC6847 `FS` phase or provide hardware vblank synchronization.
+
 ## MC6803 setup
 
 The test follows the MC6803 timer definitions in the [MC6803
