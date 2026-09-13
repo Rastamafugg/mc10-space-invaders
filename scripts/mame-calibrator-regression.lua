@@ -59,11 +59,13 @@ local PHASE_WAIT_RESIZE_DOWN = 10
 local PHASE_WAIT_RESIZE_UP = 11
 local PHASE_WAIT_MOVE_UP = 12
 local PHASE_WAIT_MOVE_DOWN = 13
-local PHASE_WAIT_OFFSCREEN_BOTTOM = 14
-local PHASE_WAIT_OFFSCREEN_TOP = 15
-local PHASE_WAIT_RESUME = 16
-local PHASE_WAIT_RETURN_MANUAL = 17
-local PHASE_DONE = 18
+local PHASE_WAIT_OFFSCREEN_BOTTOM_START = 14
+local PHASE_WAIT_OFFSCREEN_BOTTOM = 15
+local PHASE_WAIT_OFFSCREEN_TOP_START = 16
+local PHASE_WAIT_OFFSCREEN_TOP = 17
+local PHASE_WAIT_RESUME = 18
+local PHASE_WAIT_RETURN_MANUAL = 19
+local PHASE_DONE = 20
 
 assert(cassette, "MC-10 cassette device not found")
 assert(screen, "MC-10 screen device not found")
@@ -85,6 +87,7 @@ local sweep_first = nil
 local paused_first = nil
 local paused_height = nil
 local paused_offset = nil
+local paused_sweep_y = nil
 local offscreen_target = nil
 local failed = false
 local tape_end_frame = nil
@@ -106,6 +109,20 @@ end
 
 local function read_word(address)
     return read_byte(address) * 0x100 + read_byte(address + 1)
+end
+
+local function signed_byte(value)
+    if value >= 0x80 then
+        return value - 0x100
+    end
+    return value
+end
+
+local function offset_byte(value)
+    if value < 0 then
+        return value + 0x100
+    end
+    return value
 end
 
 local function format_bbox(box)
@@ -530,6 +547,21 @@ frame_subscription = emu.add_machine_frame_notifier(function()
             print("MC-10 pixels: paused-sweep stability pass changed=0")
             paused_height = read_byte(CAL_SWEEP_HEIGHT_STATE)
             paused_offset = read_byte(CAL_SWEEP_OFFSET)
+            paused_sweep_y = read_byte(CAL_SWEEP_Y)
+            local upper_boundary = -(paused_sweep_y + paused_height)
+            local lower_boundary = 0x60 - paused_sweep_y
+            print(string.format(
+                "MC-10 geometry: sweep-base=%02X height=%02X upper-last-visible=%+d(%02X) upper-first-invisible=%+d(%02X) lower-last-visible=%+d(%02X) lower-first-invisible=%+d(%02X)",
+                paused_sweep_y,
+                paused_height,
+                upper_boundary + 4,
+                offset_byte(upper_boundary + 4),
+                upper_boundary,
+                offset_byte(upper_boundary),
+                lower_boundary - 4,
+                offset_byte(lower_boundary - 4),
+                lower_boundary,
+                offset_byte(lower_boundary)))
             post_key("A", "A reduce paused sweep-box height", PHASE_WAIT_RESIZE_DOWN)
         end
     elseif phase == PHASE_WAIT_RESIZE_DOWN then
@@ -597,7 +629,11 @@ frame_subscription = emu.add_machine_frame_notifier(function()
                     read_byte(CAL_SWEEP_OFFSET),
                     read_byte(CAL_RECT_Y)))
                 offscreen_target = (read_byte(CAL_SWEEP_OFFSET) + 4) % 0x100
-                post_key("S", "S move sweep box fully below screen", PHASE_WAIT_OFFSCREEN_BOTTOM)
+                post_key(
+                    "R",
+                    "R release keyboard before lower sweep scan",
+                    PHASE_WAIT_OFFSCREEN_BOTTOM_START,
+                    frame + 12)
             elseif frame > deadline then
                 fail("downward-moved phase-sweep box was not visible")
             end
@@ -607,17 +643,28 @@ frame_subscription = emu.add_machine_frame_notifier(function()
                 paused_offset,
                 read_byte(CAL_SWEEP_OFFSET)))
         end
+    elseif phase == PHASE_WAIT_OFFSCREEN_BOTTOM_START then
+        if frame >= deadline then
+            post_key("S", "S move sweep box toward lower boundary", PHASE_WAIT_OFFSCREEN_BOTTOM)
+        end
     elseif phase == PHASE_WAIT_OFFSCREEN_BOTTOM then
         if read_byte(CAL_SWEEP_OFFSET) == offscreen_target then
-            if offscreen_target == 0x60 then
+            local lower_boundary = offset_byte(0x60 - paused_sweep_y)
+            if offscreen_target == lower_boundary then
                 local background = sample_cg3_background("sweep-offscreen-bottom")
                 if background then
                     print(string.format(
-                        "MC-10 pixels: sweep bottom offscreen pass offset=%02X y=%02X",
+                        "MC-10 pixels: sweep bottom disappearance pass offset=%+d(%02X) y=%02X",
+                        signed_byte(read_byte(CAL_SWEEP_OFFSET)),
                         read_byte(CAL_SWEEP_OFFSET),
                         read_byte(CAL_RECT_Y)))
-                    offscreen_target = (read_byte(CAL_SWEEP_OFFSET) - 4) % 0x100
-                    post_key("W", "W move sweep box fully above screen", PHASE_WAIT_OFFSCREEN_TOP)
+                    offscreen_target =
+                        (read_byte(CAL_SWEEP_OFFSET) - 4) % 0x100
+                    post_key(
+                        "R",
+                        "R release keyboard before upper sweep scan",
+                        PHASE_WAIT_OFFSCREEN_TOP_START,
+                        frame + 12)
                 elseif frame > deadline then
                     fail("sweep box remained visible at the lower offscreen limit")
                 end
@@ -631,13 +678,19 @@ frame_subscription = emu.add_machine_frame_notifier(function()
                 offscreen_target,
                 read_byte(CAL_SWEEP_OFFSET)))
         end
+    elseif phase == PHASE_WAIT_OFFSCREEN_TOP_START then
+        if frame >= deadline then
+            post_key("W", "W move sweep box toward upper boundary", PHASE_WAIT_OFFSCREEN_TOP)
+        end
     elseif phase == PHASE_WAIT_OFFSCREEN_TOP then
         if read_byte(CAL_SWEEP_OFFSET) == offscreen_target then
-            if offscreen_target == 0xA0 then
+            local upper_boundary = offset_byte(-(paused_sweep_y + paused_height))
+            if offscreen_target == upper_boundary then
                 local background = sample_cg3_background("sweep-offscreen-top")
                 if background then
                     print(string.format(
-                        "MC-10 pixels: sweep top offscreen pass offset=%02X y=%02X",
+                        "MC-10 pixels: sweep top disappearance pass offset=%+d(%02X) y=%02X",
+                        signed_byte(read_byte(CAL_SWEEP_OFFSET)),
                         read_byte(CAL_SWEEP_OFFSET),
                         read_byte(CAL_RECT_Y)))
                     post_key("{P}", "P resume sweep", PHASE_WAIT_RESUME)
