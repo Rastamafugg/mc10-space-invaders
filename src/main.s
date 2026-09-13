@@ -1593,7 +1593,7 @@ game_draw_text_char = *
         INX
         INX
         STX     WORK_ROW_PTR
-        LDAA    #$05
+        CLRA
         STAA    WORK_ROW
 game_draw_text_row = *
         LDX     WORK_SPRITE
@@ -1647,8 +1647,10 @@ game_draw_text_skip_pixel = *
         LDAA    WORK_COL
         CMPA    #$04
         BCS     game_draw_text_col
-        DEC     WORK_ROW
-        BNE     game_draw_text_row
+        INC     WORK_ROW
+        LDAA    WORK_ROW
+        CMPA    #$05
+        BCS     game_draw_text_row
 
         LDAA    WORK_WIDTH
         CMPA    #$02
