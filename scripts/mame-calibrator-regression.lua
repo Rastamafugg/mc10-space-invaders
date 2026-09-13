@@ -551,17 +551,19 @@ frame_subscription = emu.add_machine_frame_notifier(function()
             local upper_boundary = -(paused_sweep_y + paused_height)
             local lower_boundary = 0x60 - paused_sweep_y
             print(string.format(
-                "MC-10 geometry: sweep-base=%02X height=%02X upper-last-visible=%+d(%02X) upper-first-invisible=%+d(%02X) lower-last-visible=%+d(%02X) lower-first-invisible=%+d(%02X)",
+                "MC-10 geometry: sweep-base=%02X height=%02X upper-last-visible=%+d(%02X) upper-first-invisible=%+d(%02X top=%+d) lower-last-visible=%+d(%02X) lower-first-invisible=%+d(%02X top=%+d)",
                 paused_sweep_y,
                 paused_height,
                 upper_boundary + 4,
                 offset_byte(upper_boundary + 4),
                 upper_boundary,
                 offset_byte(upper_boundary),
+                -paused_height,
                 lower_boundary - 4,
                 offset_byte(lower_boundary - 4),
                 lower_boundary,
-                offset_byte(lower_boundary)))
+                offset_byte(lower_boundary),
+                0x60))
             post_key("A", "A reduce paused sweep-box height", PHASE_WAIT_RESIZE_DOWN)
         end
     elseif phase == PHASE_WAIT_RESIZE_DOWN then
@@ -654,10 +656,10 @@ frame_subscription = emu.add_machine_frame_notifier(function()
                 local background = sample_cg3_background("sweep-offscreen-bottom")
                 if background then
                     print(string.format(
-                        "MC-10 pixels: sweep bottom disappearance pass offset=%+d(%02X) y=%02X",
+                        "MC-10 pixels: sweep bottom disappearance pass offset=%+d(%02X) logical-top=+%d",
                         signed_byte(read_byte(CAL_SWEEP_OFFSET)),
                         read_byte(CAL_SWEEP_OFFSET),
-                        read_byte(CAL_RECT_Y)))
+                        0x60))
                     offscreen_target =
                         (read_byte(CAL_SWEEP_OFFSET) - 4) % 0x100
                     post_key(
@@ -689,10 +691,10 @@ frame_subscription = emu.add_machine_frame_notifier(function()
                 local background = sample_cg3_background("sweep-offscreen-top")
                 if background then
                     print(string.format(
-                        "MC-10 pixels: sweep top disappearance pass offset=%+d(%02X) y=%02X",
+                        "MC-10 pixels: sweep top disappearance pass offset=%+d(%02X) logical-top=%+d",
                         signed_byte(read_byte(CAL_SWEEP_OFFSET)),
                         read_byte(CAL_SWEEP_OFFSET),
-                        read_byte(CAL_RECT_Y)))
+                        -paused_height))
                     post_key("{P}", "P resume sweep", PHASE_WAIT_RESUME)
                 elseif frame > deadline then
                     fail("sweep box remained visible at the upper offscreen limit")
