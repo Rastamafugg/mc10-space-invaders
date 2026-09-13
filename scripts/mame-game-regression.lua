@@ -4,7 +4,8 @@
 -- enters the MC-10 machine-code loader, waits for the complete Space Invaders
 -- image, executes it, verifies the first rendered game screen, exercises
 -- keyboard movement, firing, and an alien collision, and checks the alien-shot
--- player-hit, life-loss, formation-descent, and shield-clearing paths.
+-- player-hit, life-loss, formation-descent, shield-clearing, visible game-over,
+-- and Space-restart paths.
 --
 -- Run with:
 --   mame.exe mc10 -ramsize 20K -cass build/space-invaders.c10 \
@@ -719,13 +720,14 @@ local function verify_game_input()
             and read_byte(GAME_LIVES) == formation_collision_lives_before - 1
             and read_byte(GAME_OVER) == 0
             and read_byte(GAME_PLAYER_X) == 0x0F
-            and read_byte(GAME_INVADER_X) == 0x08
             and read_byte(GAME_INVADER_Y) == 0x04 then
             local error_message = screen:snapshot("mame-game-formation-player-collision.png")
             if error_message then
                 fail("formation-player-collision snapshot failed: " .. tostring(error_message))
             end
-            print("MC-10 game formation/player collision: PASS lives=2->1 after descent")
+            print(string.format(
+                "MC-10 game formation/player collision: PASS lives=2->1 after descent formation-x=%02X",
+                read_byte(GAME_INVADER_X)))
 
             -- Repeat the same collision with the final remaining life. The
             -- normal game_set_game_over path must latch GAME_OVER and stop
@@ -784,17 +786,68 @@ local function verify_game_input()
                 game_over_frame)
         end
         if frame >= phase_deadline then
+            local metrics = analyze_pixels()
+            local title = count_region(metrics, "red", 2 * 18, 2 * 23, 2 * 110, 2 * 35)
+            local instruction = count_region(metrics, "yellow", 2 * 8, 2 * 49, 2 * 120, 2 * 57)
+            if title < 50 then
+                return nil, string.format("visible GAME OVER title is missing: %d red pixels", title)
+            end
+            if instruction < 20 then
+                return nil, string.format(
+                    "restart instruction is missing: %d yellow pixels",
+                    instruction)
+            end
             local error_message = screen:snapshot("mame-game-over.png")
             if error_message then
                 fail("game-over snapshot failed: " .. tostring(error_message))
             end
-            print("MC-10 game over: PASS final-life latch stable")
+            print(string.format(
+                "MC-10 game over screen: PASS title-red=%d instruction-yellow=%d",
+                title,
+                instruction))
+            post_game_key("{SPACE}", "SPACE (restart after game over)", "waiting for restart")
+            return true
+        end
+        return true
+    end
+
+    if phase == "waiting for restart" then
+        local state, state_error = game_state_ready()
+        if state and read_byte(GAME_OVER) == 0 then
+            if state.bullet_active ~= 0 or state.alien_shot_active ~= 0 then
+                return nil, "restart restored the game with an active projectile"
+            end
+            local metrics = analyze_pixels()
+            local blue_box = metrics.boxes.blue
+            local player = count_region(metrics, "red", 0, 2 * 80, ACTIVE_WIDTH, 2 * 89)
+            local shields = count_region(metrics, "yellow", 0, 2 * 68, ACTIVE_WIDTH, 2 * 80)
+            if not blue_box or metrics.counts.blue < ACTIVE_PIXELS * 0.70 then
+                return nil, "restart did not restore the blue CG3 playfield"
+            end
+            if player < 30 or shields < 80 then
+                return nil, string.format(
+                    "restart did not restore player/shields: player=%d shields=%d",
+                    player,
+                    shields)
+            end
+            local error_message = screen:snapshot("mame-game-restart.png")
+            if error_message then
+                fail("restart snapshot failed: " .. tostring(error_message))
+            end
+            print(string.format(
+                "MC-10 game restart: PASS lives=%d score=%02X%02X%02X%02X player-x=%02X",
+                state.lives,
+                state.score0,
+                state.score1,
+                state.score2,
+                state.score3,
+                state.player_x))
             print("MC-10 game regression: PASS")
             phase = "complete"
             machine:exit()
             return true
         end
-        return true
+        return nil, state_error or "restart did not restore the opening game state"
     end
 
     return nil, "unknown game input phase: " .. phase

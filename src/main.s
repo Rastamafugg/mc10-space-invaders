@@ -250,7 +250,10 @@ game_initialize_aliens_loop = *
 ; the current state is drawn over the blue background.
 game_update = *
         LDAA    GAME_OVER
-        BNE     game_update_done
+        BEQ     game_update_playing
+        JSR     game_restart_keyboard
+        BRA     game_update_done
+game_update_playing = *
 
         JSR     game_erase_dynamic
         JSR     game_keyboard
@@ -287,6 +290,32 @@ game_update_draw = *
         JSR     game_draw_score
         JSR     game_draw_lives
 game_update_done = *
+        RTS
+
+; While GAME_OVER is latched, Space restarts the game. Keep the normal fire
+; latch set after initialization so a held key cannot immediately fire again.
+game_restart_keyboard = *
+        LDAA    #$FF
+        STAA    PORT1_DDR
+        LDAA    #$7F                    ; PB7/PA3: Space
+        STAA    PORT1
+        LDAA    KEYBOARD_ROWS
+        BITA    #$08
+        BNE     game_restart_release
+        LDAA    GAME_FIRE_LATCH
+        BNE     game_restart_done
+        LDAA    #$01
+        STAA    GAME_FIRE_LATCH
+        JSR     game_initialize
+        LDAA    #$01                    ; suppress a held Space on next update
+        STAA    GAME_FIRE_LATCH
+        BRA     game_restart_done
+game_restart_release = *
+        CLRA
+        STAA    GAME_FIRE_LATCH
+game_restart_done = *
+        LDAA    #$FF
+        STAA    PORT1
         RTS
 
 ; Keyboard scan for A/D and Space. Rows are active-low and one Port 1 column
@@ -1506,7 +1535,164 @@ game_set_game_over = *
         STAA    GAME_BULLET_ACTIVE
         STAA    GAME_ALIEN_SHOT_ACTIVE
         STAA    GAME_BONUS_ACTIVE
+        STAA    GAME_TICK
         STAA    FORMATION_BUSY
+        JSR     game_draw_game_over
+        RTS
+
+; Replace the playfield with a visible restart prompt. The 4x5 font is drawn
+; one CG3 pixel at a time because this path runs once per game over and keeps
+; the normal sprite renderer unchanged.
+game_draw_game_over = *
+        CLRA
+        STAA    WORK_XBYTE
+        STAA    WORK_Y
+        LDAA    #$20
+        STAA    WORK_WIDTH
+        LDAA    #$60
+        STAA    WORK_HEIGHT
+        JSR     game_clear_rect
+
+        LDAA    #$03                    ; red GAME OVER
+        STAA    WORK_COLOR
+        LDAA    #$13                    ; centered 9-character title
+        STAA    WORK_XBYTE
+        LDAA    #$18
+        STAA    WORK_Y
+        LDAA    #$02                    ; two-pixel scale
+        STAA    WORK_WIDTH
+        LDAA    #$09
+        STAA    WORK_TEMP2
+        LDX     #game_over_text
+        STX     WORK_ROW_PTR
+        JSR     game_draw_text
+
+        LDAA    #$01                    ; yellow restart instruction
+        STAA    WORK_COLOR
+        LDAA    #$09
+        STAA    WORK_XBYTE
+        LDAA    #$32
+        STAA    WORK_Y
+        LDAA    #$01                    ; one-pixel scale, 22 characters
+        STAA    WORK_WIDTH
+        LDAA    #$16
+        STAA    WORK_TEMP2
+        LDX     #game_over_instruction_text
+        STX     WORK_ROW_PTR
+        JSR     game_draw_text
+        RTS
+
+; Draw a fixed-width 4x5 word. WORK_ROW_PTR points to a table of glyph
+; pointers; WORK_XBYTE/WORK_Y are the origin, WORK_WIDTH is 1 or 2, and
+; WORK_TEMP2 is the number of glyphs.
+game_draw_text = *
+game_draw_text_char = *
+        LDX     WORK_ROW_PTR
+        LDD     0,X
+        STD     WORK_SPRITE
+        INX
+        INX
+        STX     WORK_ROW_PTR
+        LDAA    #$05
+        STAA    WORK_ROW
+game_draw_text_row = *
+        LDX     WORK_SPRITE
+        LDAA    0,X
+        INX
+        STX     WORK_SPRITE
+        STAA    WORK_SHAPE
+        LDAA    #$08
+        STAA    WORK_TEMP
+        CLRA
+        STAA    WORK_COL
+game_draw_text_col = *
+        LDAA    WORK_SHAPE
+        ANDA    WORK_TEMP
+        BEQ     game_draw_text_skip_pixel
+
+        LDAA    WORK_WIDTH
+        CMPA    #$02
+        BNE     game_draw_text_x_one
+        LDAA    WORK_COL
+        ASLA
+        ADDA    WORK_XBYTE
+        BRA     game_draw_text_x_ready
+game_draw_text_x_one = *
+        LDAA    WORK_XBYTE
+        ADDA    WORK_COL
+game_draw_text_x_ready = *
+        STAA    PLOT_X
+
+        LDAA    WORK_WIDTH
+        CMPA    #$02
+        BNE     game_draw_text_y_one
+        LDAA    WORK_ROW
+        ASLA
+        ADDA    WORK_Y
+        BRA     game_draw_text_y_ready
+game_draw_text_y_one = *
+        LDAA    WORK_Y
+        ADDA    WORK_ROW
+game_draw_text_y_ready = *
+        STAA    PLOT_Y
+        LDAA    WORK_COLOR
+        STAA    PLOT_COLOR
+        JSR     game_draw_text_pixel
+
+game_draw_text_skip_pixel = *
+        LDAA    WORK_TEMP
+        LSRA
+        STAA    WORK_TEMP
+        INC     WORK_COL
+        LDAA    WORK_COL
+        CMPA    #$04
+        BCS     game_draw_text_col
+        DEC     WORK_ROW
+        BNE     game_draw_text_row
+
+        LDAA    WORK_WIDTH
+        CMPA    #$02
+        BNE     game_draw_text_advance_one
+        LDAA    WORK_XBYTE
+        ADDA    #$0A
+        STAA    WORK_XBYTE
+        BRA     game_draw_text_advance_done
+game_draw_text_advance_one = *
+        INC     WORK_XBYTE
+        INC     WORK_XBYTE
+        INC     WORK_XBYTE
+        INC     WORK_XBYTE
+        INC     WORK_XBYTE
+game_draw_text_advance_done = *
+        DEC     WORK_TEMP2
+        BEQ     game_draw_text_done
+        JMP     game_draw_text_char
+game_draw_text_done = *
+        RTS
+
+game_draw_text_pixel = *
+        LDAA    WORK_WIDTH
+        CMPA    #$02
+        BNE     game_draw_text_pixel_one
+        JSR     game_plot_pixel
+        LDAA    PLOT_X
+        INCA
+        STAA    PLOT_X
+        JSR     game_plot_pixel
+        LDAA    PLOT_X
+        DECA
+        STAA    PLOT_X
+        LDAA    PLOT_Y
+        INCA
+        STAA    PLOT_Y
+        JSR     game_plot_pixel
+        LDAA    PLOT_X
+        INCA
+        STAA    PLOT_X
+        JSR     game_plot_pixel
+        RTS
+game_draw_text_pixel_one = *
+        JSR     game_plot_pixel
         RTS
 
 game_rng_next = *
@@ -1637,6 +1823,41 @@ digit_8 = *
         DB      $0F,$09,$0F,$09,$0F
 digit_9 = *
         DB      $0F,$09,$0F,$01,$0F
+
+; Five-row, four-column font used only by the game-over overlay.
+font_G = *
+        DB      $0F,$08,$0B,$09,$0F
+font_A = *
+        DB      $06,$09,$0F,$09,$09
+font_M = *
+        DB      $09,$0F,$0F,$09,$09
+font_E = *
+        DB      $0F,$08,$0E,$08,$0F
+font_SPACE = *
+        DB      $00,$00,$00,$00,$00
+font_O = *
+        DB      $06,$09,$09,$09,$06
+font_V = *
+        DB      $09,$09,$09,$06,$06
+font_R = *
+        DB      $0E,$09,$0E,$0A,$09
+font_P = *
+        DB      $0E,$09,$0E,$08,$08
+font_S = *
+        DB      $0F,$08,$06,$01,$0F
+font_C = *
+        DB      $07,$08,$08,$08,$07
+font_T = *
+        DB      $0F,$06,$06,$06,$06
+
+game_over_text = *
+        DW      font_G,font_A,font_M,font_E,font_SPACE
+        DW      font_O,font_V,font_E,font_R
+game_over_instruction_text = *
+        DW      font_P,font_R,font_E,font_S,font_S,font_SPACE
+        DW      font_S,font_P,font_A,font_C,font_E,font_SPACE
+        DW      font_T,font_O,font_SPACE
+        DW      font_R,font_E,font_S,font_T,font_A,font_R,font_T
 
 pixel_clear_masks = *
         DB      $3F,$CF,$F3,$FC

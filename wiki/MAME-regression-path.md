@@ -84,7 +84,10 @@ flag, and erase the complete shield region.
 It then seeds the left-edge formation at `Y=31`; its next descent to `Y=38`
 must exercise the formation/player collision path and reduce lives from 2 to 1.
 Repeating that descent with the final life must set `GAME_OVER=1` and leave
-the game frame counter stable.
+the game frame counter stable. The harness then checks the rendered red
+`GAME OVER` title and yellow `PRESS SPACE TO RESTART` instruction, posts Space,
+and verifies that the normal initialization path restores three lives, zero
+score, active shields, the player ship, and no active projectiles.
 
 ```text
 mame.exe mc10 -noreadconfig -ramsize 20K \
@@ -92,22 +95,22 @@ mame.exe mc10 -noreadconfig -ramsize 20K \
   -cass "E:\path\to\build\space-invaders.c10" \
   -autoboot_delay 2 \
   -autoboot_script "E:\path\to\scripts\mame-game-regression.lua" \
-  -seconds_to_run 150 \
+  -seconds_to_run 180 \
   -snapshot_directory "E:\path\to\build\mame-snapshots" \
   -window -nothrottle
 ```
 
 The expected result is `MC-10 game regression: PASS`, with
 `mame-game-initial.png`, `mame-game-fired.png`, `mame-game-collision.png`,
-`mame-game-alien-shot.png`, and `mame-game-shield-damage.png` in the snapshot
 `mame-game-alien-shot.png`, `mame-game-shield-damage.png`,
-`mame-game-player-hit.png`, and `mame-game-descent-shield-clear.png` in the
-`mame-game-formation-player-collision.png`, and `mame-game-over.png` in the
-snapshot directory. The harness analyzes the
+`mame-game-player-hit.png`, `mame-game-descent-shield-clear.png`,
+`mame-game-formation-player-collision.png`, `mame-game-over.png`, and
+`mame-game-restart.png` in the snapshot directory. The harness analyzes the
 active 256x192 surface inside MAME's 372x243 screen capture and ignores the
 border. It verifies a deterministic opening render and one keyboard-controlled
 gameplay path plus deterministic collision fixtures, not all later gameplay
-rules or physical MC6847 `FS` phase.
+rules or physical MC6847 `FS` phase. The game-over phase validates both
+rendered overlay regions and the Space restart transition.
 
 The game workspace is `$4C00-$4C5A`, after the visible `$4000-$4BFF` CG3
 surface. The relocation is necessary because MAME does not provide portable

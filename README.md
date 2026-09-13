@@ -228,17 +228,20 @@ all 55 live alien entries, active shields, blue CG3 background, five colored
 alien rows, shield structures, player ship, and bottom HUD. It saves the proof
 images as `build/mame-snapshots/mame-game-initial.png`,
 `mame-game-fired.png`, `mame-game-collision.png`, `mame-game-alien-shot.png`,
-`mame-game-shield-damage.png`, `mame-game-player-hit.png`, and
+`mame-game-shield-damage.png`, `mame-game-player-hit.png`,
 `mame-game-descent-shield-clear.png`,
-`mame-game-formation-player-collision.png`, and `mame-game-over.png`. It then posts A and D
-key events, verifies player movement, posts `{SPACE}`, verifies the bullet
-launch state, and waits for that bullet to remove a live alien and increase the
-score. It then verifies a naturally activated alien shot and uses a deterministic
-MAME memory fixture to place an active shot one update above a lit shield pixel;
-the normal alien-shot update must deactivate the shot and reduce the shield's
-yellow-pixel count. A successful run prints movement, firing, alien-shot,
-collision, shield-damage, player-damage, formation-descent, shield-clear, and
-`MC-10 game regression: PASS` markers.
+`mame-game-formation-player-collision.png`, `mame-game-over.png`, and
+`mame-game-restart.png`. It then posts A and D key events, verifies player
+movement, posts `{SPACE}`, verifies the bullet launch state, and waits for that
+bullet to remove a live alien and increase the score. It then verifies a
+naturally activated alien shot and uses deterministic MAME memory fixtures for
+shield damage, player damage, formation descent, formation/player collision,
+and final-life game over. The game-over fixture checks rendered red title and
+yellow restart-instruction pixels, posts `{SPACE}`, and verifies that the game
+returns to three lives, zero score, active shields, the player ship, and no
+active projectiles. A successful run prints movement, firing, alien-shot,
+collision, shield-damage, player-damage, formation-descent, shield-clear,
+game-over-screen, game-restart, and `MC-10 game regression: PASS` markers.
 
 The player-hit check seeds an alien projectile at the player for one normal
 update and requires lives to change from 3 to 2 while the player and formation
@@ -248,7 +251,10 @@ reverse direction, deactivate shields, and clear the complete shield region.
 The formation/player collision check then seeds the left-edge formation at
 `Y=31`; its next descent to `Y=38` must reduce lives from 2 to 1 and reset the
 player and formation. Repeating that collision with the final life must set
-`GAME_OVER=1` and leave the game frame counter stable.
+`GAME_OVER=1` and leave the game frame counter stable. The harness then checks
+the visible red `GAME OVER` title and yellow `PRESS SPACE TO RESTART` text,
+posts Space, and verifies that initialization restores three lives, zero score,
+the player and shields, and no active projectiles.
 
 Run it after rebuilding the game:
 
@@ -260,7 +266,7 @@ $mc10RomPath = 'E:\projects\ladybug\web\docker\roms;E:\tools\mame0289-bin\roms'
   -cass 'E:\projects\mc10-space-invaders\build\space-invaders.c10' `
   -autoboot_delay 2 `
   -autoboot_script 'E:\projects\mc10-space-invaders\scripts\mame-game-regression.lua' `
-  -seconds_to_run 150 `
+  -seconds_to_run 180 `
   -snapshot_directory 'E:\projects\mc10-space-invaders\build\mame-snapshots' `
   -window -nothrottle
 ```
@@ -269,7 +275,11 @@ The harness checks the active 256x192 MC-10 video surface in MAME's 372x243
 capture and ignores the surrounding border. It validates the opening game
 render after initialization has reached the main loop and exercises one
 keyboard-controlled gameplay path plus deterministic collision fixtures. The
-game workspace is at `$4C00-$4C5A`, immediately after
+game-over screen replaces the playfield with a red `GAME OVER` title and a
+yellow `PRESS SPACE TO RESTART` instruction. While latched in game over, only
+Space is scanned; the first detected press calls the normal initialization path
+and latches the key until release so a held Space cannot immediately fire.
+The game workspace is at `$4C00-$4C5A`, immediately after
 the visible `$4000-$4BFF` CG3 surface, because `$0100-$015A` is not portable
 MC-10 RAM in MAME.
 
