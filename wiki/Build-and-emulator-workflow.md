@@ -22,6 +22,12 @@ Separate diagnostic targets are available:
 python scripts/regression.py --skip-emulator
 ```
 
+The default timing-calibrator workflow is a full-width CG3 band moved with
+`W`/`S`. Its phase-sweep diagnostic is entered with `M` three times; pause it
+with `P`, then use `A`/`D` to change box height and `W`/`S` to move the box
+vertically. See [Timing calibrator](Timing-calibrator) for the operator goal
+and interpretation of each result.
+
 The build uses CRASM for MC6803 assembly and `scripts/make_c10.py` for MC-10 cassette framing. Generated binaries and cassette images are under `build/`.
 
 ## XRoar

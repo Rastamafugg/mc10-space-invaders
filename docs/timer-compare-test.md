@@ -29,19 +29,19 @@ latency.
 `src/timing-calibrator.s` is a separate `$5000` cassette program for tuning
 the compare schedule while the machine is running. It starts with the verified
 period `$3A56` and phase `$0000`, displays both values and a live compare-event
-counter, and toggles P2.0 on every output compare. The MC-10 cannot read `FS`,
-so the program cannot select the correct phase without an external connection.
-Use P2.0 and the MC6847 `FS` signal as the two channels of a scope or logic
-analyzer.
+counter in its alpha diagnostic mode, and toggles P2.0 on every output compare.
+The MC-10 cannot read `FS`, so the program cannot select the correct phase
+without an external connection. Use P2.0 and the MC6847 `FS` signal as the two
+channels of a scope or logic analyzer.
 
 | Key | Action |
 | --- | --- |
-| `A` / `D` | Decrease or increase period by one E clock |
-| `W` / `S` | Decrease or increase signed phase by eight E clocks |
+| `A` / `D` | Decrease or increase period by one E clock; in sweep mode, decrease or increase box height by four CG3 rows |
+| `W` / `S` | In manual mode, move the full-width band; otherwise change phase by eight E clocks; in sweep mode, move the box bias up or down by four CG3 rows |
 | `R` | Re-arm the next compare from the current counter |
 | `Space` | Reset the event counter and marker |
-| `M` | Cycle alpha, raster-drift, and phase-sweep modes |
-| `P` | Pause or resume the phase sweep while in mode 2 |
+| `M` | Cycle manual band, alpha values, raster drift, and phase sweep |
+| `P` | Pause or resume the phase sweep while in mode 3 |
 
 Build and launch it on a stock XRoar MC-10 with:
 
@@ -49,11 +49,27 @@ Build and launch it on a stock XRoar MC-10 with:
 .\space-invaders.ps1 calibrator-run
 ```
 
-This path does not require the MCX-128 ROM. The initial period is one modeled
-NTSC field. Adjust `A`/`D` until the measured marker period matches `FS`, then
-use `W`/`S` to move the marker edge to the desired field edge. Press `R` after
-large changes to re-anchor the schedule. The value shown in `PHASE` is a signed
+This path does not require the MCX-128 ROM. The initial screen is the default
+manual workflow: a blue CG3 surface with a full-width green band near the top.
+The purpose of this mode is to locate the usable blank interval visually. Press
+`W` to move the band upward and `S` to move it downward. Continue until the
+band is just outside the visible picture, then record the current candidate
+phase using the alpha panel. The value shown in `PHASE` is a signed
 two's-complement E-clock offset.
+
+Use the result as follows:
+
+1. Build and launch `calibrator-run`.
+2. Use `W`/`S` to move the band through the display and off either edge. The
+   transition where the band disappears identifies the candidate render-safe
+   interval.
+3. Press `M` once to enter the alpha panel and record `PERIOD` and `PHASE`.
+4. Copy those values into `TIMER_PERIOD` and `TIMER_PHASE` in `src/main.s`.
+5. Press `R` after a large period or phase change to re-anchor the next compare.
+
+The band is the primary operator workflow because its full width makes the
+visible boundary easy to identify. It does not claim that software has detected
+`FS`.
 
 To carry a measured setting into the game, copy the displayed `PERIOD` and
 `PHASE` values into `TIMER_PERIOD` and `TIMER_PHASE` in `src/main.s`. The
@@ -66,7 +82,9 @@ XRoar-only run cannot prove absolute FS phase.
 
 ### Visual witnesses
 
-Press `M` once to select raster-drift mode. The display changes to MC6847 CG3
+From the default manual band, press `M` once for the readable alpha panel, twice
+for raster-drift mode, and three times for phase-sweep mode. Raster-drift mode
+changes the display to MC6847 CG3
 with the GYBR palette, a blue background, and a green 16x8 pixel rectangle.
 The rectangle moves four pixels per compare and wraps at the right edge. The
 screen write is performed in the foreground after each timer event, while the
@@ -76,13 +94,22 @@ With a period error, the boundary walks through the raster and the rectangle
 can show a beat or tear. `A` and `D` make this period error deliberately
 larger or smaller.
 
-Press `M` again to select phase-sweep mode. The program starts at approximately
+In phase-sweep mode, the program starts at approximately
 minus half a field, advances the compare phase by 64 E clocks every eight
 compare events, reaches plus half a field, and then reverses. The red witness
 rectangle moves vertically as the candidate phase changes. Press `P` to hold
-the current candidate while inspecting the display, and press `M` to return to
-the alpha panel and read the exact `PHASE` value. Press `P` again after
-returning to mode 2 to resume the scan.
+the current candidate while inspecting the display. While paused, press `A` or
+`D` to decrease or increase the red box height, and press `W` or `S` to move
+the box upward or downward. The height is clamped to 4-48 CG3 rows and the
+vertical bias is clamped to -48 through +48 rows. The box is clamped to the
+visible surface after both adjustments. Press `P` again to resume the scan, or
+press `M` to return to manual mode.
+
+Changing height is useful for estimating the vertical duration of a safe
+interval: reduce the box until the visible boundary is clear, then increase it
+until rendering begins to overlap the unsafe portion. Moving the box tests
+whether that interval is stationary in screen coordinates. These controls are
+diagnostic only; they do not change the game's renderer.
 
 The sweep is an operator-guided search. The MC-10 has no CPU-readable FS input,
 video sampling path, or tear detector, so software cannot calculate a numeric
@@ -95,9 +122,10 @@ display output should not be treated as a physical composite-tear measurement.
 The visual surface is initialized with interrupts disabled. Each subsequent
 CG3 update erases the old rectangle, draws the new one, and restores the
 RAM-resident output-compare vector at `$4206-$4208`, which overlaps the CG3
-screen surface. The test therefore remains usable even when the sweep visits
-that scanline, but it is not a hardware page flip or a vertical-blank
-interrupt.
+screen surface. Height or vertical-position changes clear and redraw the
+diagnostic surface for the same reason. The test therefore remains usable even
+when the sweep visits that scanline, but it is not a hardware page flip or a
+vertical-blank interrupt.
 
 ### MAME Lua pixel harness
 
@@ -111,13 +139,16 @@ performs this sequence:
    a changed pixel buffer on the second sample.
 3. Press `M`, verify the blue CG3 surface and red sweep witness, and require a
    changed pixel buffer on the second sample.
-4. Press `P`, require two identical pixel buffers while the sweep is paused,
-   press `P` again, and return with `M` to the alpha panel.
+4. Press `P`, require two identical pixel buffers while the sweep is paused.
+5. Press `A` and `D` and verify the sweep height decreases and returns to its
+   original value. Press `W` and `S` and verify the vertical bias moves up and
+   returns to its original value.
+6. Press `P` again and return with `M` to the manual band.
 
 Run it after `.\space-invaders.ps1 calibrator` using the command in the
 [README harness section](../README.md#mame-lua-calibrator-harness). The
-expected result is `MC-10 calibrator regression: PASS`, with eight named PNG
-captures in `build/mame-snapshots/`.
+expected result is `MC-10 calibrator regression: PASS`, with additional named
+PNG captures for the resized and moved sweep box in `build/mame-snapshots/`.
 
 The harness uses MAME's [natural keyboard API](https://docs.mamedev.org/luascript/ref-input.html),
 [cassette and screen APIs](https://docs.mamedev.org/luascript/ref-devices.html),

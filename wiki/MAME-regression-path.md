@@ -37,9 +37,10 @@ The script posts `CLOADM{ENTER}`, starts the cassette, waits for the cassette po
 The repository also includes `scripts/mame-calibrator-regression.lua`. It runs
 the same cassette transfer, then verifies the timing calibrator's rendered
 state machine instead of stopping at the first alpha-panel snapshot. The
-harness checks alpha mode, raster-drift mode, phase-sweep mode, pause/resume,
-and the return to alpha. It compares rendered pixel buffers to require motion
-in both active modes and zero change while the sweep is paused.
+harness checks the default manual band, alpha mode, raster-drift mode,
+phase-sweep mode, pause/resume, sweep-box height decrease/increase, vertical
+movement, and the return to manual mode. It compares rendered pixel buffers to
+require motion in both active modes and zero change while the sweep is paused.
 
 ```text
 mame.exe mc10 -noreadconfig -ramsize 20K \
@@ -52,12 +53,9 @@ mame.exe mc10 -noreadconfig -ramsize 20K \
   -window -nothrottle
 ```
 
-The expected result is `MC-10 calibrator regression: PASS`. The eight PNG
-captures are named `mame-calibrator-alpha.png`,
-`mame-calibrator-drift-first.png`, `mame-calibrator-drift-second.png`,
-`mame-calibrator-sweep-first.png`, `mame-calibrator-sweep-second.png`,
-`mame-calibrator-paused-first.png`, `mame-calibrator-paused-second.png`, and
-`mame-calibrator-return-alpha.png`. The current MAME screen API
+The expected result is `MC-10 calibrator regression: PASS`. The harness writes
+manual, alpha, drift, sweep, pause, resize, and vertical-movement PNG captures
+under `build/mame-snapshots/`. The current MAME screen API
 reports a 372x243 image for this machine; the harness applies color thresholds
 to the active 256x192 MC-10 surface and does not count the MAME border as
 video evidence. This is a rendered-emulator regression, not a measurement of

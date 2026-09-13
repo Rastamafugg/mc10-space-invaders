@@ -3,13 +3,18 @@
 ; The stock MC-10 does not expose the MC6847 FS signal to the CPU, so this
 ; program cannot decide which phase produces the smallest visible tear by
 ; itself. It emits a P2.0 marker at every MC6803 output compare for external
-; measurement, and provides two visual witnesses:
+; measurement, and provides one operator-facing calibration witness plus two
+; advanced diagnostics:
 ;
-;   M mode 1: a CG3 rectangle advances once per compare. A period error makes
+;   default: a full-width CG3 band moves with W/S as the candidate phase is
+;            changed. Moving the band beyond the visible raster marks a phase
+;            candidate for the render-safe interval.
+;   M mode 2: a CG3 rectangle advances once per compare. A period error makes
 ;             the update phase drift relative to the display raster.
-;   M mode 2: the compare phase is swept across one field while a rectangle
+;   M mode 3: the compare phase is swept across one field while a rectangle
 ;             moves through the display. P pauses and resumes the sweep so the
-;             operator can inspect the least-disrupted phase.
+;             operator can inspect the least-disrupted phase. While paused,
+;             A/D changes the rectangle height and W/S moves its vertical bias.
 ;
 ; The visual modes are deliberately diagnostic, not a claim that the program
 ; has read FS. Use P2.0 and MC6847 FS as the two channels of a scope or logic
@@ -37,8 +42,12 @@ BACKGROUND_BYTE EQU     $AA             ; CG3 GYBR blue, two bits 10
 ; rectangle is written as complete packed CG3 bytes.
 CAL_RECT_BYTES  EQU     $04             ; 16 pixels
 CAL_RECT_HEIGHT EQU     $08
+CAL_SWEEP_HEIGHT_MIN EQU $04
+CAL_SWEEP_HEIGHT_MAX EQU $30
 CAL_RECT_SKIP   EQU     $001C           ; 32-byte line minus four bytes
 CAL_DRIFT_STEP  EQU     $04
+CAL_BAND_HEIGHT EQU     $04             ; full-width manual calibration band
+CAL_MANUAL_PHASE_STEP EQU $0270         ; about 1/24 field per W/S press
 CAL_SWEEP_STEP  EQU     $0040
 CAL_SWEEP_HOLD_FRAMES EQU $08
 CAL_SWEEP_START EQU     $E2D5           ; -$1D2B, half a modeled field
@@ -62,7 +71,7 @@ CAL_SCREEN_H    EQU     $00ED
 CAL_SCREEN_L    EQU     $00EE
 CAL_VALUE_H     EQU     $00EF
 CAL_VALUE_L     EQU     $00F0
-CAL_MODE        EQU     $00F1       ; 0=alpha, 1=drift, 2=phase sweep
+CAL_MODE        EQU     $00F1       ; 0=manual band, 1=alpha, 2=drift, 3=sweep
 CAL_RECT_X      EQU     $00F2
 CAL_RECT_Y      EQU     $00F3
 CAL_RECT_OLD_X  EQU     $00F4
@@ -72,6 +81,8 @@ CAL_SWEEP_ACTIVE EQU    $00F7
 CAL_SWEEP_HOLD  EQU     $00F8
 CAL_SWEEP_DIR   EQU     $00F9       ; 1=phase increasing, 0=decreasing
 CAL_SWEEP_Y     EQU     $00FA
+CAL_SWEEP_HEIGHT_STATE EQU $00FB     ; sweep rectangle height in CG3 rows
+CAL_SWEEP_OFFSET EQU $00FC         ; signed vertical bias, -$30..+$30
 
         *       = $5000
 
@@ -89,13 +100,13 @@ start = *
         STAA    CAL_MARKER
         STAA    CAL_KEY_LATCH
         STAA    CAL_DIRTY
-        STAA    CAL_MODE
+        STAA    CAL_MODE                    ; manual band is the default workflow
         STAA    CAL_SWEEP_ACTIVE
 
-        ; Alpha mode is the readable default. The vector is installed only
-        ; after the screen initialization because the vector lives in screen
-        ; RAM at $4206-$4208.
-        JSR     cal_alpha_initialize
+        ; Start with the operator-facing manual band. The vector is installed
+        ; only after screen initialization because it lives in screen RAM at
+        ; $4206-$4208.
+        JSR     cal_visual_initialize
         JSR     cal_install_vector
         JSR     cal_rearm_locked
         CLI
@@ -153,10 +164,14 @@ cal_timer_done = *
         STAA    CAL_DIRTY
         RTI
 
-; A/D changes period by one E clock. W/S changes phase by eight E clocks.
-; R re-arms from the current counter. M cycles display modes. P pauses or
-; resumes the phase sweep in mode 2. Keys are edge-triggered; release a key
-; before the next adjustment.
+; A/D changes period by one E clock outside sweep mode. W/S changes phase by
+; eight E clocks in the alpha and drift modes, and by one visual band step in
+; manual mode. In sweep mode A/D changes the red box height and W/S changes
+; its signed vertical bias. Pause with P before making geometry adjustments
+; when inspecting one fixed candidate. R re-arms from the current counter.
+; M cycles manual, alpha, drift, and sweep modes. P pauses or resumes the
+; phase sweep in mode 3.
+; Keys are edge-triggered; release a key before the next adjustment.
 cal_keyboard = *
         LDAA    #$FF
         STAA    $0000
@@ -171,10 +186,22 @@ cal_keyboard = *
         BNE     cal_key_d
         ORAA    #$01
         STAA    CAL_KEY_LATCH
+        LDAA    CAL_MODE
+        CMPA    #$03
+        BEQ     cal_key_a_sweep
         LDD     CAL_PERIOD_H
         SUBD    #$0001
         STD     CAL_PERIOD_H
         JSR     cal_adjusted
+        BRA     cal_key_d
+cal_key_a_sweep = *
+        LDAA    CAL_SWEEP_HEIGHT_STATE
+        CMPA    #CAL_SWEEP_HEIGHT_MIN
+        BCS     cal_key_d
+        BEQ     cal_key_d
+        SUBA    #$04
+        STAA    CAL_SWEEP_HEIGHT_STATE
+        JSR     cal_sweep_redraw
         BRA     cal_key_d
 cal_key_a_up = *
         LDAA    CAL_KEY_LATCH
@@ -191,10 +218,21 @@ cal_key_d = *
         BNE     cal_key_w
         ORAA    #$02
         STAA    CAL_KEY_LATCH
+        LDAA    CAL_MODE
+        CMPA    #$03
+        BEQ     cal_key_d_sweep
         LDD     CAL_PERIOD_H
         ADDD    #$0001
         STD     CAL_PERIOD_H
         JSR     cal_adjusted
+        BRA     cal_key_w
+cal_key_d_sweep = *
+        LDAA    CAL_SWEEP_HEIGHT_STATE
+        CMPA    #CAL_SWEEP_HEIGHT_MAX
+        BCC     cal_key_w
+        ADDA    #$04
+        STAA    CAL_SWEEP_HEIGHT_STATE
+        JSR     cal_sweep_redraw
         BRA     cal_key_w
 cal_key_d_up = *
         LDAA    CAL_KEY_LATCH
@@ -211,9 +249,45 @@ cal_key_w = *
         BNE     cal_key_s
         ORAA    #$04
         STAA    CAL_KEY_LATCH
+        LDAA    CAL_MODE
+        BEQ     cal_key_w_manual
+        CMPA    #$03
+        BEQ     cal_key_w_sweep
         LDD     CAL_PHASE_H
         SUBD    #$0008
         STD     CAL_PHASE_H
+        JSR     cal_adjusted
+        BRA     cal_key_s
+cal_key_w_sweep = *
+        LDAA    CAL_SWEEP_OFFSET
+        SUBA    #$04
+        CMPA    #$D0
+        BCC     cal_key_w_sweep_store
+        LDAA    #$D0
+cal_key_w_sweep_store = *
+        STAA    CAL_SWEEP_OFFSET
+        JSR     cal_sweep_redraw
+        BRA     cal_key_s
+cal_key_w_manual = *
+        LDD     CAL_PHASE_H
+        SUBD    #CAL_MANUAL_PHASE_STEP
+        STD     CAL_PHASE_H
+        LDAA    CAL_RECT_Y
+        CMPA    #$FC
+        BCC     cal_key_w_manual_top
+        CMPA    #$60
+        BCS     cal_key_w_manual_visible
+        LDAA    #$5C                    ; recover from the lower offscreen edge
+        BRA     cal_key_w_manual_store
+cal_key_w_manual_visible = *
+        SUBA    #$04
+cal_key_w_manual_store = *
+        STAA    CAL_RECT_Y
+        JSR     cal_adjusted
+        BRA     cal_key_s
+cal_key_w_manual_top = *
+        LDAA    #$FC                    ; hold at the upper offscreen edge
+        STAA    CAL_RECT_Y
         JSR     cal_adjusted
         BRA     cal_key_s
 cal_key_w_up = *
@@ -231,9 +305,40 @@ cal_key_s = *
         BNE     cal_key_r
         ORAA    #$08
         STAA    CAL_KEY_LATCH
+        LDAA    CAL_MODE
+        BEQ     cal_key_s_manual
+        CMPA    #$03
+        BEQ     cal_key_s_sweep
         LDD     CAL_PHASE_H
         ADDD    #$0008
         STD     CAL_PHASE_H
+        JSR     cal_adjusted
+        BRA     cal_key_r
+cal_key_s_sweep = *
+        LDAA    CAL_SWEEP_OFFSET
+        ADDA    #$04
+        CMPA    #$30
+        BCS     cal_key_s_sweep_store
+        BEQ     cal_key_s_sweep_store
+        LDAA    #$30
+cal_key_s_sweep_store = *
+        STAA    CAL_SWEEP_OFFSET
+        JSR     cal_sweep_redraw
+        BRA     cal_key_r
+cal_key_s_manual = *
+        LDD     CAL_PHASE_H
+        ADDD    #CAL_MANUAL_PHASE_STEP
+        STD     CAL_PHASE_H
+        LDAA    CAL_RECT_Y
+        CMPA    #$FC
+        BCC     cal_key_s_manual_top
+        ADDA    #$04
+        STAA    CAL_RECT_Y
+        JSR     cal_adjusted
+        BRA     cal_key_r
+cal_key_s_manual_top = *
+        CLRA                            ; recover from the upper offscreen edge
+        STAA    CAL_RECT_Y
         JSR     cal_adjusted
         BRA     cal_key_r
 cal_key_s_up = *
@@ -313,7 +418,7 @@ cal_key_p = *
         ORAA    #$80
         STAA    CAL_KEY_LATCH
         LDAA    CAL_MODE
-        CMPA    #$02
+        CMPA    #$03
         BNE     cal_key_p_done
         LDAA    CAL_SWEEP_ACTIVE
         EORA    #$01
@@ -337,13 +442,13 @@ cal_adjusted = *
         JSR     cal_rearm
         RTS
 
-; Cycle alpha -> drift -> phase sweep -> alpha. The screen initialization is
+; Cycle manual band -> alpha -> drift -> phase sweep -> manual band. The screen initialization is
 ; performed with interrupts disabled because CG3 writes can overlap $4206-$4208.
 cal_mode_cycle = *
         SEI
         LDAA    CAL_MODE
         INCA
-        CMPA    #$03
+        CMPA    #$04
         BCS     cal_mode_store
         CLRA
 cal_mode_store = *
@@ -354,6 +459,7 @@ cal_mode_store = *
         STAA    CAL_MARKER
         STAA    TIMER_PORT2
         LDAA    CAL_MODE
+        CMPA    #$01
         BEQ     cal_mode_alpha_screen
         JSR     cal_visual_initialize
         BRA     cal_mode_finish
@@ -396,10 +502,30 @@ cal_visual_initialize = *
         LDAA    #CG3_GYBR
         STAA    VIDEO_MODE
         JSR     cal_clear_cg3
+        LDAA    #CAL_RECT_HEIGHT
+        STAA    CAL_SWEEP_HEIGHT_STATE
+        CLRA
+        STAA    CAL_SWEEP_OFFSET
         LDAA    CAL_MODE
-        CMPA    #$02
+        CMPA    #$03
         BEQ     cal_visual_sweep_init
 
+        CMPA    #$02
+        BEQ     cal_visual_drift_init
+
+        ; Manual mode starts with an upper-edge, full-width green band. W/S moves
+        ; it four scan rows and changes the candidate phase by about 1/24 field.
+        LDAA    #$08
+        STAA    CAL_RECT_Y
+        STAA    CAL_RECT_OLD_Y
+        CLRA
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_band
+        RTS
+
+cal_visual_drift_init = *
+        LDAA    #CAL_RECT_HEIGHT
+        STAA    CAL_SWEEP_HEIGHT_STATE
         LDAA    #$08
         STAA    CAL_RECT_X
         STAA    CAL_RECT_OLD_X
@@ -414,6 +540,10 @@ cal_visual_initialize = *
         RTS
 
 cal_visual_sweep_init = *
+        LDAA    #CAL_RECT_HEIGHT
+        STAA    CAL_SWEEP_HEIGHT_STATE
+        CLRA
+        STAA    CAL_SWEEP_OFFSET
         LDD     #CAL_SWEEP_START
         STD     CAL_PHASE_H
         LDAA    #$01
@@ -457,8 +587,37 @@ cal_clear_cg3_page_again = *
         BNE     cal_clear_cg3_pages
         RTS
 
-; Draw a solid 16x8 packed-CG3 rectangle at CAL_RECT_X/CAL_RECT_Y.
-; This routine uses the foreground-only CAL_TEMP loop byte.
+; Draw a full-width horizontal band. CAL_RECT_Y is an unsigned visual
+; coordinate; values $60-$FF are intentionally offscreen and draw nothing.
+cal_draw_band = *
+        LDAA    CAL_RECT_Y
+        CMPA    #$60
+        BCS     cal_draw_band_visible
+        RTS
+cal_draw_band_visible = *
+        LDAB    #$20
+        MUL
+        ADDD    #SCREEN
+        STD     CAL_SCREEN_H
+        LDAA    #CAL_BAND_HEIGHT
+        STAA    CAL_TEMP
+cal_draw_band_row = *
+        LDX     CAL_SCREEN_H
+        LDAA    CAL_RECT_BYTE
+        LDAB    #$20
+cal_draw_band_byte = *
+        STAA    0,X
+        INX
+        DECB
+        BNE     cal_draw_band_byte
+        STX     CAL_SCREEN_H
+        DEC     CAL_TEMP
+        BNE     cal_draw_band_row
+        RTS
+
+; Draw a solid 16-pixel packed-CG3 rectangle at CAL_RECT_X/CAL_RECT_Y.
+; The height is CAL_SWEEP_HEIGHT_STATE rows. This routine uses the
+; foreground-only CAL_TEMP loop byte.
 cal_draw_rect = *
         LDAA    CAL_RECT_Y
         LDAB    #$20
@@ -473,7 +632,7 @@ cal_draw_rect = *
         LDX     CAL_SCREEN_H
         ABX
         STX     CAL_SCREEN_H
-        LDAA    #CAL_RECT_HEIGHT
+        LDAA    CAL_SWEEP_HEIGHT_STATE
         STAA    CAL_TEMP
 cal_draw_rect_row = *
         LDX     CAL_SCREEN_H
@@ -495,6 +654,7 @@ cal_draw_rect_bytes = *
 ; Alpha display updates remain separate from visual witness updates.
 cal_update_display = *
         LDAA    CAL_MODE
+        CMPA    #$01
         BEQ     cal_update_alpha
         JSR     cal_update_visual
         RTS
@@ -521,15 +681,38 @@ cal_update_alpha = *
 cal_update_visual = *
         SEI
         LDAA    CAL_MODE
-        CMPA    #$01
+        BEQ     cal_update_manual
+        CMPA    #$02
         BEQ     cal_update_drift
         JSR     cal_sweep_tick
+        BRA     cal_update_visual_done
+cal_update_manual = *
+        JSR     cal_manual_tick
         BRA     cal_update_visual_done
 cal_update_drift = *
         JSR     cal_drift_tick
 cal_update_visual_done = *
         JSR     cal_install_vector
         CLI
+        RTS
+
+; Erase and redraw the manual band at its current phase-selected position.
+; Keeping the old coordinate allows W/S to move it cleanly off either edge.
+cal_manual_tick = *
+        LDAA    CAL_RECT_Y
+        STAA    CAL_TEMP2
+        LDAA    CAL_RECT_OLD_Y
+        STAA    CAL_RECT_Y
+        LDAA    #BACKGROUND_BYTE
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_band
+        LDAA    CAL_TEMP2
+        STAA    CAL_RECT_Y
+        CLRA
+        STAA    CAL_RECT_BYTE
+        JSR     cal_draw_band
+        LDAA    CAL_RECT_Y
+        STAA    CAL_RECT_OLD_Y
         RTS
 
 ; Move the green marker one packed-pixel column per compare. The old marker
@@ -565,6 +748,10 @@ cal_drift_store_x = *
 ; the candidate phase and the update boundary. The program can scan but cannot
 ; measure visible tear, so P pauses the current candidate for inspection.
 cal_sweep_tick = *
+        LDAA    CAL_SWEEP_ACTIVE
+        BNE     cal_sweep_active_body
+        JMP     cal_sweep_paused
+cal_sweep_active_body = *
         LDAA    CAL_RECT_X
         STAA    CAL_RECT_OLD_X
         LDAA    CAL_RECT_Y
@@ -573,12 +760,6 @@ cal_sweep_tick = *
         STAA    CAL_RECT_BYTE
         JSR     cal_draw_rect
 
-        LDAA    CAL_SWEEP_ACTIVE
-        BNE     cal_sweep_active_near
-        JMP     cal_sweep_draw
-cal_sweep_active_near = *
-        JMP     cal_sweep_active_body
-cal_sweep_active_body = *
         DEC     CAL_SWEEP_HOLD
         BNE     cal_sweep_draw
         LDAA    #CAL_SWEEP_HOLD_FRAMES
@@ -653,8 +834,7 @@ cal_sweep_rearm = *
         JSR     cal_rearm_locked
 
 cal_sweep_draw = *
-        LDAA    CAL_SWEEP_Y
-        STAA    CAL_RECT_Y
+        JSR     cal_sweep_actual_y
         LDAA    #$FF                    ; CG3 red
         STAA    CAL_RECT_BYTE
         JSR     cal_draw_rect
@@ -663,6 +843,56 @@ cal_sweep_draw = *
         LDAA    CAL_RECT_Y
         STAA    CAL_RECT_OLD_Y
         RTS
+; Convert the automatic sweep row plus signed operator bias to a visible
+; rectangle origin. Clamp to the current height so the complete box remains
+; within the 96 logical CG3 rows. CAL_TEMP is the largest legal origin and
+; CAL_TEMP2 is the absolute value of a negative bias.
+cal_sweep_actual_y = *
+        LDAA    #$60
+        SUBA    CAL_SWEEP_HEIGHT_STATE
+        STAA    CAL_TEMP
+        LDAA    CAL_SWEEP_OFFSET
+        BPL     cal_sweep_offset_positive
+        COMA
+        INCA
+        STAA    CAL_TEMP2
+        LDAA    CAL_SWEEP_Y
+        CMPA    CAL_TEMP2
+        BCS     cal_sweep_actual_zero
+        BEQ     cal_sweep_actual_zero
+        SUBA    CAL_TEMP2
+        BRA     cal_sweep_actual_clamp
+cal_sweep_offset_positive = *
+        ADDA    CAL_SWEEP_Y
+cal_sweep_actual_clamp = *
+        CMPA    CAL_TEMP
+        BCS     cal_sweep_actual_store
+        BEQ     cal_sweep_actual_store
+        LDAA    CAL_TEMP
+        BRA     cal_sweep_actual_store
+cal_sweep_actual_zero = *
+        CLRA
+cal_sweep_actual_store = *
+        STAA    CAL_RECT_Y
+        RTS
+
+; Redraw the current sweep witness after a height or vertical-bias change.
+; The complete CG3 surface is cleared so a larger previous rectangle cannot
+; leave stale red rows behind. This is diagnostic-only work, not the game's
+; frame renderer.
+cal_sweep_redraw = *
+        SEI
+        JSR     cal_clear_cg3
+        JSR     cal_sweep_draw
+        JSR     cal_install_vector
+        CLI
+        LDAA    #$01
+        STAA    CAL_DIRTY
+        RTS
+cal_sweep_paused = *
+        ; Keep the current red witness on screen while P is paused. Erasing
+        ; before testing CAL_SWEEP_ACTIVE would make pause appear blank.
+        RTS
 
 ; Static explanatory text. MC-10 alpha codes use A=1..Z=$1A, digits $30..$39.
 cal_write_static = *
@@ -670,7 +900,7 @@ cal_write_static = *
         LDAA    #$00
         LDAB    #$14
         JSR     cal_write_line
-        LDX     #cal_sweep_help
+        LDX     #cal_manual_help
         LDAA    #$05
         LDAB    #$0F
         JSR     cal_write_line
@@ -686,10 +916,15 @@ cal_write_static = *
 
 cal_update_mode = *
         LDAA    CAL_MODE
-        BEQ     cal_mode_alpha_text
+        BEQ     cal_mode_manual_text
         CMPA    #$01
+        BEQ     cal_mode_alpha_text
+        CMPA    #$02
         BEQ     cal_mode_drift_text
         LDX     #cal_mode_sweep
+        BRA     cal_mode_write
+cal_mode_manual_text = *
+        LDX     #cal_mode_manual
         BRA     cal_mode_write
 cal_mode_alpha_text = *
         LDX     #cal_mode_alpha_label
@@ -704,7 +939,10 @@ cal_mode_write = *
 
 cal_update_sweep_status = *
         LDAA    CAL_MODE
-        CMPA    #$02
+        BEQ     cal_manual_status_help
+        CMPA    #$01
+        BEQ     cal_alpha_status_help
+        CMPA    #$03
         BNE     cal_sweep_status_help
         LDAA    CAL_SWEEP_ACTIVE
         BEQ     cal_sweep_status_stop
@@ -715,6 +953,12 @@ cal_sweep_status_stop = *
         BRA     cal_sweep_status_write
 cal_sweep_status_help = *
         LDX     #cal_sweep_help
+        BRA     cal_sweep_status_write
+cal_alpha_status_help = *
+        LDX     #cal_alpha_help
+        BRA     cal_sweep_status_write
+cal_manual_status_help = *
+        LDX     #cal_manual_help
 cal_sweep_status_write = *
         LDAA    #$05
         LDAB    #$0F
@@ -791,20 +1035,26 @@ cal_write_char = *
 
 cal_title = *
         DB      $06,$13,$20,$14,$09,$0D,$09,$0E,$07,$20,$03,$01,$0C,$09,$02,$12,$01,$14,$0F,$12
+cal_mode_manual = *
+        DB      $0D,$0F,$04,$05,$3A,$20,$0D,$01,$0E,$15,$01
 cal_mode_alpha_label = *
         DB      $0D,$0F,$04,$05,$3A,$20,$01,$0C,$10,$08,$01
 cal_mode_drift = *
         DB      $0D,$0F,$04,$05,$3A,$20,$04,$12,$09,$06,$14
 cal_mode_sweep = *
         DB      $0D,$0F,$04,$05,$3A,$20,$13,$17,$05,$05,$10
+cal_manual_help = *
+        DB      $17,$2F,$13,$20,$0D,$0F,$16,$05,$20,$02,$01,$0E,$04,$20,$20
 cal_sweep_help = *
-        DB      $0D,$20,$03,$19,$03,$0C,$05,$20,$10,$20,$13,$17,$05,$05,$10
+        DB      $01,$2F,$04,$20,$13,$09,$1A,$05,$20,$17,$2F,$13,$20,$19,$20
+cal_alpha_help = *
+        DB      $01,$2F,$04,$20,$10,$05,$12,$09,$0F,$04,$20,$17,$2F,$13,$20
 cal_sweep_run = *
         DB      $13,$17,$05,$05,$10,$3A,$20,$12,$15,$0E,$20,$20,$20,$20,$20
 cal_sweep_stop = *
         DB      $13,$17,$05,$05,$10,$3A,$20,$13,$14,$0F,$10,$20,$20,$20,$20
 cal_controls_1 = *
-        DB      $01,$2F,$04,$20,$10,$05,$12,$09,$0F,$04,$20,$20,$17,$2F,$13,$20,$10,$08,$01,$13,$05,$20
+        DB      $01,$2F,$04,$20,$10,$05,$12,$09,$0F,$04,$20,$20,$17,$2F,$13,$20,$01,$04,$10,$15,$13,$14
 cal_controls_2 = *
         DB      $12,$20,$12,$05,$01,$12,$0D,$20,$20,$13,$10,$01,$03,$05,$20,$12,$05,$13,$05,$14
 

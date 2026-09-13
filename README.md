@@ -48,11 +48,14 @@ The live field-timing calibrator is also separate:
 .\space-invaders.ps1 calibrator-run
 ```
 
-It displays the compare period, signed phase, and event count, and toggles
-P2.0 for external comparison with MC6847 FS. It does not require an MCX-128
-ROM. Press `M` to cycle the readable alpha panel, the CG3 raster-drift
-rectangle, and the CG3 phase sweep. In phase-sweep mode, `P` pauses or resumes
-the candidate scan so the operator can inspect the least-disrupted phase.
+It displays the compare period, signed phase, and event count in its alpha
+diagnostic mode, and toggles P2.0 for external comparison with MC6847 FS. It
+does not require an MCX-128 ROM. The default screen is a blue CG3 surface with
+a full-width green band. Use `W`/`S` to move that band through the display and
+off an edge, then use the alpha panel to read the candidate phase. `M` cycles
+manual band, alpha values, raster drift, and phase sweep. In phase-sweep mode,
+`P` pauses or resumes the candidate scan; while paused, `A`/`D` changes the red
+box height and `W`/`S` moves it vertically.
 See [the calibrator procedure](docs/timer-compare-test.md#live-timing-calibrator)
 and its [visual-witness section](docs/timer-compare-test.md#visual-witnesses).
 
@@ -181,10 +184,11 @@ python3 scripts/regression.py --skip-emulator
 The repository includes `scripts/mame-calibrator-regression.lua`, a permanent
 MAME-side test for the cassette-loaded timing calibrator. It posts the MC-10
 loader commands, starts the mounted cassette, waits for the complete transfer,
-posts `EXEC`, cycles alpha, raster-drift, and phase-sweep modes, and checks the
-rendered pixels after each transition. It also compares two frames for motion,
-compares two paused frames for zero change, and verifies the final return to
-alpha mode.
+posts `EXEC`, verifies the default manual band, cycles alpha, raster-drift, and
+phase-sweep modes, and checks the rendered pixels after each transition. It
+also compares two frames for motion, compares two paused frames for zero
+change, verifies sweep-box height decrease/increase and vertical movement, and
+verifies the final return to manual mode.
 
 Build the calibrator, then run the harness from PowerShell. The ROM path below
 uses the MC-10 ROM supplied by the template checkout and the MAME ROM directory:
@@ -203,15 +207,20 @@ $mc10RomPath = 'E:\projects\ladybug\web\docker\roms;E:\tools\mame0289-bin\roms'
 ```
 
 The expected terminal result is `MC-10 calibrator regression: PASS`. The
-harness writes `mame-calibrator-alpha.png`, `mame-calibrator-drift-first.png`,
-`mame-calibrator-drift-second.png`, `mame-calibrator-sweep-first.png`,
-`mame-calibrator-sweep-second.png`, `mame-calibrator-paused-first.png`,
-`mame-calibrator-paused-second.png`, and `mame-calibrator-return-alpha.png`
+harness writes `mame-calibrator-manual-first.png`,
+`mame-calibrator-manual-second.png`, `mame-calibrator-alpha.png`,
+`mame-calibrator-drift-first.png`, `mame-calibrator-drift-second.png`,
+`mame-calibrator-sweep-first.png`, `mame-calibrator-sweep-second.png`,
+`mame-calibrator-paused-first.png`, `mame-calibrator-paused-second.png`,
+`mame-calibrator-sweep-height-small.png`,
+`mame-calibrator-sweep-height-large.png`, `mame-calibrator-sweep-move-up.png`,
+`mame-calibrator-sweep-move-down.png`, and `mame-calibrator-return-manual.png`
 under
 `build/mame-snapshots/`. Pixel classification covers the full MAME capture,
 but render thresholds are applied to the active 256x192 MC-10 video region;
 the surrounding MAME border is not counted as video evidence. The harness
-uses MAME's `{ENTER}` and `{P}` key codes. Literal text such as `\n` or
+uses MAME's `{ENTER}` and `{P}` key codes. In sweep mode, pause with `P` before
+using `A`/`D` to resize the box or `W`/`S` to move it. Literal text such as `\n` or
 `SPACE` is not substituted for those emulated keys.
 
 This is an emulator-render regression, not proof of physical MC6847 `FS`
