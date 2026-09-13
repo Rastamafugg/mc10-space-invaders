@@ -2,8 +2,9 @@
 --
 -- The cassette image is mounted by MAME before this script starts. The script
 -- enters the MC-10 machine-code loader, waits for the complete Space Invaders
--- image, executes it, verifies the first rendered game screen, and exercises
--- keyboard movement, firing, and an alien collision.
+-- image, executes it, verifies the first rendered game screen, exercises
+-- keyboard movement, firing, and an alien collision, and checks the alien-shot
+-- player-hit, life-loss, formation-descent, and shield-clearing paths.
 --
 -- Run with:
 --   mame.exe mc10 -ramsize 20K -cass build/space-invaders.c10 \
@@ -34,10 +35,13 @@ local GAME_ALIEN_SHOT_ACTIVE = 0x00EE
 local GAME_ALIEN_SHOT_TICK = 0x00EF
 local GAME_INVADER_X = 0x00F0
 local GAME_INVADER_Y = 0x00F1
+local GAME_INVADER_DIR = 0x00F2
+local GAME_INVADER_TICK = 0x00F3
 local GAME_BONUS_ACTIVE = 0x00F6
 local GAME_SHIELDS_ACTIVE = 0x00FB
 local ALIEN_LIVE = 0x4C00
 local WORK_TEMP = 0x4C49
+local FORMATION_BUSY = 0x4C53
 
 local EXEC_MIN_FRAME = 2400
 local EXEC_TIMEOUT_FRAME = 7200
@@ -49,6 +53,8 @@ local SHIELD_LEFT = 2 * 16
 local SHIELD_TOP = 2 * 70
 local SHIELD_RIGHT = 2 * 28
 local SHIELD_BOTTOM = 2 * 77
+local ALL_SHIELDS_TOP = 2 * 68
+local ALL_SHIELDS_BOTTOM = 2 * 80
 
 assert(cassette, "MC-10 cassette device not found")
 assert(screen, "MC-10 screen device not found")
@@ -72,6 +78,8 @@ local left_player_x = nil
 local right_player_x = nil
 local live_aliens_at_start = 55
 local shield_yellow_before = nil
+local shields_before_descent = nil
+local player_lives_before = nil
 
 local function post_game_key(code, description, next_phase)
     keyboard:post_coded(code)
@@ -92,6 +100,10 @@ end
 
 local function read_byte(address)
     return program_space:read_u8(address)
+end
+
+local function write_byte(address, value)
+    program_space:write_u8(address, value)
 end
 
 local function trace_state(label)
@@ -305,6 +317,16 @@ local function shield_yellow_count(metrics)
         SHIELD_TOP,
         SHIELD_RIGHT,
         SHIELD_BOTTOM)
+end
+
+local function all_shield_yellow_count(metrics)
+    return count_region(
+        metrics,
+        "yellow",
+        0,
+        ALL_SHIELDS_TOP,
+        ACTIVE_WIDTH,
+        ALL_SHIELDS_BOTTOM)
 end
 
 local function verify_initial_screen()
@@ -577,15 +599,106 @@ local function verify_game_input()
                 shield_yellow_before,
                 shield_yellow_after,
                 read_byte(GAME_ALIEN_SHOT_ACTIVE)))
-            print("MC-10 game regression: PASS")
-            phase = "complete"
-            machine:exit()
+            -- Seed the normal alien-shot collision one pixel-coordinate step
+            -- above the player. The next game update must spend one life and
+            -- reset the active formation and player state.
+            player_lives_before = read_byte(GAME_LIVES)
+            write_byte(GAME_ALIEN_SHOT_X, 0x10)
+            write_byte(GAME_ALIEN_SHOT_Y, 0x51)
+            write_byte(GAME_ALIEN_SHOT_TICK, 0x01)
+            write_byte(GAME_ALIEN_SHOT_ACTIVE, 0x01)
+            print("MC-10 game fixture: alien shot seeded at player X=10 Y=51 TICK=01")
+            phase = "waiting for player damage"
+            phase_deadline = frame + GAME_TIMEOUT_FRAMES
             return true
         end
         return nil, string.format(
             "seeded alien shot has not reached the shield: y=%02X active=%d",
             read_byte(GAME_ALIEN_SHOT_Y),
             read_byte(GAME_ALIEN_SHOT_ACTIVE))
+    end
+
+    if phase == "waiting for player damage" then
+        if player_lives_before == 3
+            and read_byte(GAME_LIVES) == player_lives_before - 1
+            and read_byte(GAME_ALIEN_SHOT_ACTIVE) == 0
+            and read_byte(GAME_PLAYER_X) == 0x0F
+            and read_byte(GAME_INVADER_X) == 0x08
+            and read_byte(GAME_INVADER_Y) == 0x04 then
+            local error_message = screen:snapshot("mame-game-player-hit.png")
+            if error_message then
+                fail("player-hit snapshot failed: " .. tostring(error_message))
+            end
+            print("MC-10 game player damage: PASS lives=3->2 player/formation reset")
+            local metrics = analyze_pixels()
+            shields_before_descent = all_shield_yellow_count(metrics)
+            if read_byte(GAME_SHIELDS_ACTIVE) == 0 or shields_before_descent < 20 then
+                return nil, string.format(
+                    "shields are not available before descent: active=%d yellow=%d",
+                    read_byte(GAME_SHIELDS_ACTIVE),
+                    shields_before_descent)
+            end
+
+            -- Force the right-edge branch on the next normal game update.
+            -- Y=19 plus the seven-pixel descent reaches Y=20, which is the
+            -- game rule that clears the persistent shield region.
+            write_byte(GAME_INVADER_X, 0x14)
+            write_byte(GAME_INVADER_Y, 0x19)
+            write_byte(GAME_INVADER_DIR, 0x01)
+            write_byte(GAME_INVADER_TICK, 0x0F)
+            write_byte(FORMATION_BUSY, 0x00)
+            print("MC-10 game fixture: formation seeded at X=14 Y=19 DIR=01 TICK=0F")
+            phase = "waiting for formation descent"
+            phase_deadline = frame + GAME_TIMEOUT_FRAMES
+            return true
+        end
+        return nil, string.format(
+            "alien shot did not damage the player: lives=%d shot-active=%d player=%02X formation=%02X/%02X",
+            read_byte(GAME_LIVES),
+            read_byte(GAME_ALIEN_SHOT_ACTIVE),
+            read_byte(GAME_PLAYER_X),
+            read_byte(GAME_INVADER_X),
+            read_byte(GAME_INVADER_Y))
+    end
+
+    if phase == "waiting for formation descent" then
+        if read_byte(GAME_INVADER_Y) == 0x20
+            and read_byte(GAME_INVADER_DIR) == 0
+            and read_byte(GAME_SHIELDS_ACTIVE) == 0 then
+            local metrics = analyze_pixels()
+            local shields_after = all_shield_yellow_count(metrics)
+            if shields_after >= shields_before_descent then
+                return nil, string.format(
+                    "formation descended but shield pixels did not clear: %d->%d",
+                    shields_before_descent,
+                    shields_after)
+            end
+            if shields_after > 0 then
+                return nil, string.format(
+                    "formation descent left shield pixels visible: %d",
+                    shields_after)
+            end
+            local error_message = screen:snapshot("mame-game-descent-shield-clear.png")
+            if error_message then
+                fail("descent snapshot failed: " .. tostring(error_message))
+            end
+            print("MC-10 game formation descent: PASS y=19->20 dir=01->00")
+            print(string.format(
+                "MC-10 game shield clear: PASS yellow=%d->%d shields-active=1->0",
+                shields_before_descent,
+                shields_after))
+            print("MC-10 game regression: PASS")
+            phase = "complete"
+            machine:exit()
+            return true
+        end
+        return nil, string.format(
+            "formation did not descend and clear shields: x=%02X y=%02X dir=%02X tick=%02X active=%d",
+            read_byte(GAME_INVADER_X),
+            read_byte(GAME_INVADER_Y),
+            read_byte(GAME_INVADER_DIR),
+            read_byte(GAME_INVADER_TICK),
+            read_byte(GAME_SHIELDS_ACTIVE))
     end
 
     return nil, "unknown game input phase: " .. phase

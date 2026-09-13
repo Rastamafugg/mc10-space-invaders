@@ -76,6 +76,11 @@ the launched bullet to remove one alien and increase the score. It verifies a
 natural alien-shot activation, then seeds a second active shot immediately
 above a known lit shield pixel through MAME program-space writes. The normal
 alien-shot update must deactivate that shot and reduce the shield pixel count.
+It then seeds an alien shot at the player and requires the normal player-hit
+path to reduce lives from 3 to 2 and reset the player and formation. Finally,
+it seeds the formation at right-edge `X=14`, `Y=19`, with tick `0F`; the normal
+edge update must descend to `Y=20`, reverse direction, clear the shield-active
+flag, and erase the complete shield region.
 
 ```text
 mame.exe mc10 -noreadconfig -ramsize 20K \
@@ -91,10 +96,13 @@ mame.exe mc10 -noreadconfig -ramsize 20K \
 The expected result is `MC-10 game regression: PASS`, with
 `mame-game-initial.png`, `mame-game-fired.png`, `mame-game-collision.png`,
 `mame-game-alien-shot.png`, and `mame-game-shield-damage.png` in the snapshot
-directory. The harness analyzes the
+`mame-game-alien-shot.png`, `mame-game-shield-damage.png`,
+`mame-game-player-hit.png`, and `mame-game-descent-shield-clear.png` in the
+snapshot directory. The harness analyzes the
 active 256x192 surface inside MAME's 372x243 screen capture and ignores the
 border. It verifies a deterministic opening render and one keyboard-controlled
-gameplay path, not all later gameplay rules or physical MC6847 `FS` phase.
+gameplay path plus deterministic collision fixtures, not all later gameplay
+rules or physical MC6847 `FS` phase.
 
 The game workspace is `$4C00-$4C5A`, after the visible `$4000-$4BFF` CG3
 surface. The relocation is necessary because MAME does not provide portable

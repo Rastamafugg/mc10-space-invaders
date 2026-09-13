@@ -228,14 +228,22 @@ all 55 live alien entries, active shields, blue CG3 background, five colored
 alien rows, shield structures, player ship, and bottom HUD. It saves the proof
 images as `build/mame-snapshots/mame-game-initial.png`,
 `mame-game-fired.png`, `mame-game-collision.png`, `mame-game-alien-shot.png`,
-and `mame-game-shield-damage.png`. It then posts A and D
+`mame-game-shield-damage.png`, `mame-game-player-hit.png`, and
+`mame-game-descent-shield-clear.png`. It then posts A and D
 key events, verifies player movement, posts `{SPACE}`, verifies the bullet
 launch state, and waits for that bullet to remove a live alien and increase the
 score. It then verifies a naturally activated alien shot and uses a deterministic
 MAME memory fixture to place an active shot one update above a lit shield pixel;
 the normal alien-shot update must deactivate the shot and reduce the shield's
 yellow-pixel count. A successful run prints movement, firing, alien-shot,
-collision, shield-damage, and `MC-10 game regression: PASS` markers.
+collision, shield-damage, player-damage, formation-descent, shield-clear, and
+`MC-10 game regression: PASS` markers.
+
+The player-hit check seeds an alien projectile at the player for one normal
+update and requires lives to change from 3 to 2 while the player and formation
+reset. The descent check seeds the formation at right-edge `X=14`, `Y=19`,
+with its movement tick at `0F`; the next normal update must descend to `Y=20`,
+reverse direction, deactivate shields, and clear the complete shield region.
 
 Run it after rebuilding the game:
 
@@ -255,7 +263,8 @@ $mc10RomPath = 'E:\projects\ladybug\web\docker\roms;E:\tools\mame0289-bin\roms'
 The harness checks the active 256x192 MC-10 video surface in MAME's 372x243
 capture and ignores the surrounding border. It validates the opening game
 render after initialization has reached the main loop and exercises one
-keyboard-controlled gameplay path. The game workspace is at `$4C00-$4C5A`, immediately after
+keyboard-controlled gameplay path plus deterministic collision fixtures. The
+game workspace is at `$4C00-$4C5A`, immediately after
 the visible `$4000-$4BFF` CG3 surface, because `$0100-$015A` is not portable
 MC-10 RAM in MAME.
 
