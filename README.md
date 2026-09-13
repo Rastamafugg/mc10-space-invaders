@@ -229,7 +229,8 @@ alien rows, shield structures, player ship, and bottom HUD. It saves the proof
 images as `build/mame-snapshots/mame-game-initial.png`,
 `mame-game-fired.png`, `mame-game-collision.png`, `mame-game-alien-shot.png`,
 `mame-game-shield-damage.png`, `mame-game-player-hit.png`, and
-`mame-game-descent-shield-clear.png`. It then posts A and D
+`mame-game-descent-shield-clear.png`,
+`mame-game-formation-player-collision.png`, and `mame-game-over.png`. It then posts A and D
 key events, verifies player movement, posts `{SPACE}`, verifies the bullet
 launch state, and waits for that bullet to remove a live alien and increase the
 score. It then verifies a naturally activated alien shot and uses a deterministic
@@ -244,6 +245,10 @@ update and requires lives to change from 3 to 2 while the player and formation
 reset. The descent check seeds the formation at right-edge `X=14`, `Y=19`,
 with its movement tick at `0F`; the next normal update must descend to `Y=20`,
 reverse direction, deactivate shields, and clear the complete shield region.
+The formation/player collision check then seeds the left-edge formation at
+`Y=31`; its next descent to `Y=38` must reduce lives from 2 to 1 and reset the
+player and formation. Repeating that collision with the final life must set
+`GAME_OVER=1` and leave the game frame counter stable.
 
 Run it after rebuilding the game:
 

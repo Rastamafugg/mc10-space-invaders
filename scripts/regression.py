@@ -244,6 +244,8 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
         'screen:snapshot("mame-game-shield-damage.png")',
         'screen:snapshot("mame-game-player-hit.png")',
         'screen:snapshot("mame-game-descent-shield-clear.png")',
+        'screen:snapshot("mame-game-formation-player-collision.png")',
+        'screen:snapshot("mame-game-over.png")',
         'post_game_key("A",',
         'post_game_key("D",',
         'post_game_key("{SPACE}",',
@@ -256,6 +258,7 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
         "GAME_ALIEN_SHOT_Y",
         "GAME_ALIEN_SHOT_TICK",
         "GAME_SHIELDS_ACTIVE",
+        "GAME_OVER",
         "GAME_INVADER_DIR",
         "GAME_INVADER_TICK",
         "ALIEN_LIVE",
@@ -271,6 +274,9 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
         "game player damage: PASS",
         "game formation descent: PASS",
         "game shield clear: PASS",
+        "game formation/player collision: PASS",
+        "game final-life: PASS",
+        "game over: PASS",
         "MC-10 game regression: PASS",
     )
     missing_mame_game_harness_tokens = [

@@ -25,6 +25,7 @@ local GAME_SCORE_1 = 0x00E3
 local GAME_SCORE_2 = 0x00E4
 local GAME_SCORE_3 = 0x00E5
 local GAME_LIVES = 0x00E6
+local GAME_OVER = 0x00E7
 local GAME_PLAYER_X = 0x00E8
 local GAME_BULLET_X = 0x00E9
 local GAME_BULLET_Y = 0x00EA
@@ -46,6 +47,7 @@ local FORMATION_BUSY = 0x4C53
 local EXEC_MIN_FRAME = 2400
 local EXEC_TIMEOUT_FRAME = 7200
 local GAME_TIMEOUT_FRAMES = 600
+local GAME_OVER_STABLE_FRAMES = 120
 local ACTIVE_WIDTH = 256
 local ACTIVE_HEIGHT = 192
 local ACTIVE_PIXELS = ACTIVE_WIDTH * ACTIVE_HEIGHT
@@ -80,6 +82,8 @@ local live_aliens_at_start = 55
 local shield_yellow_before = nil
 local shields_before_descent = nil
 local player_lives_before = nil
+local formation_collision_lives_before = nil
+local game_over_frame = nil
 
 local function post_game_key(code, description, next_phase)
     keyboard:post_coded(code)
@@ -687,9 +691,18 @@ local function verify_game_input()
                 "MC-10 game shield clear: PASS yellow=%d->%d shields-active=1->0",
                 shields_before_descent,
                 shields_after))
-            print("MC-10 game regression: PASS")
-            phase = "complete"
-            machine:exit()
+            -- Force the next left-edge descent to reach the player level.
+            -- Y=31 plus seven pixels becomes Y=38, which is the
+            -- formation/player collision threshold.
+            formation_collision_lives_before = read_byte(GAME_LIVES)
+            write_byte(GAME_INVADER_X, 0x08)
+            write_byte(GAME_INVADER_Y, 0x31)
+            write_byte(GAME_INVADER_DIR, 0x00)
+            write_byte(GAME_INVADER_TICK, 0x0F)
+            write_byte(FORMATION_BUSY, 0x00)
+            print("MC-10 game fixture: formation seeded at X=08 Y=31 DIR=00 TICK=0F")
+            phase = "waiting for formation player collision"
+            phase_deadline = frame + GAME_TIMEOUT_FRAMES
             return true
         end
         return nil, string.format(
@@ -699,6 +712,89 @@ local function verify_game_input()
             read_byte(GAME_INVADER_DIR),
             read_byte(GAME_INVADER_TICK),
             read_byte(GAME_SHIELDS_ACTIVE))
+    end
+
+    if phase == "waiting for formation player collision" then
+        if formation_collision_lives_before == 2
+            and read_byte(GAME_LIVES) == formation_collision_lives_before - 1
+            and read_byte(GAME_OVER) == 0
+            and read_byte(GAME_PLAYER_X) == 0x0F
+            and read_byte(GAME_INVADER_X) == 0x08
+            and read_byte(GAME_INVADER_Y) == 0x04 then
+            local error_message = screen:snapshot("mame-game-formation-player-collision.png")
+            if error_message then
+                fail("formation-player-collision snapshot failed: " .. tostring(error_message))
+            end
+            print("MC-10 game formation/player collision: PASS lives=2->1 after descent")
+
+            -- Repeat the same collision with the final remaining life. The
+            -- normal game_set_game_over path must latch GAME_OVER and stop
+            -- simulation updates.
+            write_byte(GAME_INVADER_X, 0x08)
+            write_byte(GAME_INVADER_Y, 0x31)
+            write_byte(GAME_INVADER_DIR, 0x00)
+            write_byte(GAME_INVADER_TICK, 0x0F)
+            write_byte(FORMATION_BUSY, 0x00)
+            print("MC-10 game fixture: final formation collision seeded at X=08 Y=31")
+            phase = "waiting for final life loss"
+            phase_deadline = frame + GAME_TIMEOUT_FRAMES
+            return true
+        end
+        return nil, string.format(
+            "formation/player collision did not spend one life: lives=%d gameover=%d player=%02X formation=%02X/%02X",
+            read_byte(GAME_LIVES),
+            read_byte(GAME_OVER),
+            read_byte(GAME_PLAYER_X),
+            read_byte(GAME_INVADER_X),
+            read_byte(GAME_INVADER_Y))
+    end
+
+    if phase == "waiting for final life loss" then
+        if read_byte(GAME_LIVES) == 0
+            and read_byte(GAME_OVER) == 1
+            and read_byte(GAME_INVADER_X) == 0x08
+            and read_byte(GAME_INVADER_Y) == 0x38
+            and read_byte(GAME_INVADER_DIR) == 0x01 then
+            game_over_frame = read_byte(GAME_FRAME)
+            print(string.format(
+                "MC-10 game final-life: PASS lives=1->0 game-over=1 frame=%02X",
+                game_over_frame))
+            phase = "checking game-over stability"
+            phase_deadline = frame + GAME_OVER_STABLE_FRAMES
+            return true
+        end
+        return nil, string.format(
+            "final formation/player collision did not enter game over: lives=%d gameover=%d formation=%02X/%02X dir=%02X",
+            read_byte(GAME_LIVES),
+            read_byte(GAME_OVER),
+            read_byte(GAME_INVADER_X),
+            read_byte(GAME_INVADER_Y),
+            read_byte(GAME_INVADER_DIR))
+    end
+
+    if phase == "checking game-over stability" then
+        if read_byte(GAME_LIVES) ~= 0
+            or read_byte(GAME_OVER) ~= 1
+            or read_byte(GAME_FRAME) ~= game_over_frame then
+            return nil, string.format(
+                "game-over state changed after final life: lives=%d gameover=%d frame=%02X expected=%02X",
+                read_byte(GAME_LIVES),
+                read_byte(GAME_OVER),
+                read_byte(GAME_FRAME),
+                game_over_frame)
+        end
+        if frame >= phase_deadline then
+            local error_message = screen:snapshot("mame-game-over.png")
+            if error_message then
+                fail("game-over snapshot failed: " .. tostring(error_message))
+            end
+            print("MC-10 game over: PASS final-life latch stable")
+            print("MC-10 game regression: PASS")
+            phase = "complete"
+            machine:exit()
+            return true
+        end
+        return true
     end
 
     return nil, "unknown game input phase: " .. phase

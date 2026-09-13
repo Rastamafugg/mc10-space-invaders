@@ -81,6 +81,10 @@ path to reduce lives from 3 to 2 and reset the player and formation. Finally,
 it seeds the formation at right-edge `X=14`, `Y=19`, with tick `0F`; the normal
 edge update must descend to `Y=20`, reverse direction, clear the shield-active
 flag, and erase the complete shield region.
+It then seeds the left-edge formation at `Y=31`; its next descent to `Y=38`
+must exercise the formation/player collision path and reduce lives from 2 to 1.
+Repeating that descent with the final life must set `GAME_OVER=1` and leave
+the game frame counter stable.
 
 ```text
 mame.exe mc10 -noreadconfig -ramsize 20K \
@@ -98,6 +102,7 @@ The expected result is `MC-10 game regression: PASS`, with
 `mame-game-alien-shot.png`, and `mame-game-shield-damage.png` in the snapshot
 `mame-game-alien-shot.png`, `mame-game-shield-damage.png`,
 `mame-game-player-hit.png`, and `mame-game-descent-shield-clear.png` in the
+`mame-game-formation-player-collision.png`, and `mame-game-over.png` in the
 snapshot directory. The harness analyzes the
 active 256x192 surface inside MAME's 372x243 screen capture and ignores the
 border. It verifies a deterministic opening render and one keyboard-controlled
