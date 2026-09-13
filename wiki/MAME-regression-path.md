@@ -70,7 +70,9 @@ The game-specific harness is `scripts/mame-game-regression.lua`. It loads
 and waits until the game main loop is active. It then checks game state and
 pixels for the opening screen: zero score, three lives, 55 live aliens,
 shields, the blue CG3 surface, five colored alien rows, the player ship, and
-the bottom HUD.
+the bottom HUD. It then posts `A`, `D`, and `{SPACE}` through MAME's natural
+keyboard interface, verifies player movement and bullet launch, and waits for
+the launched bullet to remove one alien and increase the score.
 
 ```text
 mame.exe mc10 -noreadconfig -ramsize 20K \
@@ -84,10 +86,11 @@ mame.exe mc10 -noreadconfig -ramsize 20K \
 ```
 
 The expected result is `MC-10 game regression: PASS`, with
-`mame-game-initial.png` in the snapshot directory. The harness analyzes the
+`mame-game-initial.png`, `mame-game-fired.png`, and
+`mame-game-collision.png` in the snapshot directory. The harness analyzes the
 active 256x192 surface inside MAME's 372x243 screen capture and ignores the
-border. It verifies the opening render after initialization, not the later
-gameplay rules or physical MC6847 `FS` phase.
+border. It verifies a deterministic opening render and one keyboard-controlled
+gameplay path, not all later gameplay rules or physical MC6847 `FS` phase.
 
 The game workspace is `$4C00-$4C5A`, after the visible `$4000-$4BFF` CG3
 surface. The relocation is necessary because MAME does not provide portable

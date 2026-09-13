@@ -2,7 +2,8 @@
 --
 -- The cassette image is mounted by MAME before this script starts. The script
 -- enters the MC-10 machine-code loader, waits for the complete Space Invaders
--- image, executes it, and verifies the first rendered game screen.
+-- image, executes it, verifies the first rendered game screen, and exercises
+-- keyboard movement, firing, and an alien collision.
 --
 -- Run with:
 --   mame.exe mc10 -ramsize 20K -cass build/space-invaders.c10 \
@@ -24,6 +25,8 @@ local GAME_SCORE_2 = 0x00E4
 local GAME_SCORE_3 = 0x00E5
 local GAME_LIVES = 0x00E6
 local GAME_PLAYER_X = 0x00E8
+local GAME_BULLET_X = 0x00E9
+local GAME_BULLET_Y = 0x00EA
 local GAME_BULLET_ACTIVE = 0x00EB
 local GAME_ALIEN_SHOT_ACTIVE = 0x00EE
 local GAME_INVADER_X = 0x00F0
@@ -55,6 +58,19 @@ local exec_sent = false
 local deadline = GAME_TIMEOUT_FRAMES
 local failed = false
 local last_message = nil
+local phase = "waiting for initial game screen"
+local phase_deadline = GAME_TIMEOUT_FRAMES
+local initial_player_x = nil
+local left_player_x = nil
+local right_player_x = nil
+local live_aliens_at_start = 55
+
+local function post_game_key(code, description, next_phase)
+    keyboard:post_coded(code)
+    phase = next_phase
+    phase_deadline = frame + GAME_TIMEOUT_FRAMES
+    print(string.format("MC-10 keyboard: %s at frame %d", description, frame))
+end
 
 local function fail(message)
     if failed then
@@ -256,6 +272,23 @@ local function game_state_ready()
     return state
 end
 
+local function count_live_aliens()
+    local count = 0
+    for offset = 0, 54 do
+        if read_byte(ALIEN_LIVE + offset) ~= 0 then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function score_is_nonzero()
+    return read_byte(GAME_SCORE_0) ~= 0
+        or read_byte(GAME_SCORE_1) ~= 0
+        or read_byte(GAME_SCORE_2) ~= 0
+        or read_byte(GAME_SCORE_3) ~= 0
+end
+
 local function verify_initial_screen()
     local state, state_error = game_state_ready()
     if not state then
@@ -334,9 +367,134 @@ local function verify_initial_screen()
         state.player_x,
         state.invader_x,
         state.invader_y))
-    print("MC-10 game regression: PASS")
-    machine:exit()
+    print("MC-10 game initial screen: PASS")
     return true
+end
+
+local function verify_game_input()
+    local player_x = read_byte(GAME_PLAYER_X)
+
+    if phase == "waiting for initial game screen" then
+        local ok, message = verify_initial_screen()
+        if not ok then
+            return nil, message
+        end
+        initial_player_x = player_x
+        post_game_key("A", "A (move left)", "waiting for left movement")
+        return true
+    end
+
+    if phase == "waiting for left movement" then
+        if player_x < initial_player_x then
+            left_player_x = player_x
+            print(string.format(
+                "MC-10 game input: LEFT PASS player-x=%02X->%02X",
+                initial_player_x,
+                player_x))
+            post_game_key("D", "D (move right)", "waiting for first right movement")
+            return true
+        end
+        return nil, string.format("A did not move the player left from %02X", initial_player_x)
+    end
+
+    if phase == "waiting for first right movement" then
+        if player_x > left_player_x then
+            right_player_x = player_x
+            print(string.format(
+                "MC-10 game input: RIGHT PASS player-x=%02X->%02X",
+                left_player_x,
+                player_x))
+            post_game_key("D", "D (position for collision)", "waiting for collision alignment")
+            return true
+        end
+        return nil, string.format("D did not move the player right from %02X: got %02X", left_player_x, player_x)
+    end
+
+    if phase == "waiting for collision alignment" then
+        if player_x > right_player_x then
+            print(string.format(
+                "MC-10 game input: COLLISION ALIGN PASS player-x=%02X",
+                player_x))
+            live_aliens_at_start = count_live_aliens()
+            post_game_key("{SPACE}", "SPACE (fire)", "waiting for bullet launch")
+            return true
+        end
+        return nil, string.format(
+            "second D did not advance the collision position beyond %02X: got %02X",
+            right_player_x,
+            player_x)
+    end
+
+    if phase == "waiting for bullet launch" then
+        if read_byte(GAME_BULLET_ACTIVE) ~= 0 then
+            local bullet_x = read_byte(GAME_BULLET_X)
+            local bullet_y = read_byte(GAME_BULLET_Y)
+            if bullet_x ~= player_x + 1 then
+                return nil, string.format(
+                    "Space launched a bullet at unexpected X: player=%02X bullet=%02X",
+                    player_x,
+                    bullet_x)
+            end
+            if bullet_y == 0 or bullet_y > 0x4E then
+                return nil, string.format("Space launched a bullet at unexpected Y: %02X", bullet_y)
+            end
+            local error_message = screen:snapshot("mame-game-fired.png")
+            if error_message then
+                fail("firing snapshot failed: " .. tostring(error_message))
+            end
+            print(string.format(
+                "MC-10 game input: FIRE PASS bullet=%02X/%02X",
+                bullet_x,
+                bullet_y))
+            phase = "waiting for alien collision"
+            phase_deadline = frame + GAME_TIMEOUT_FRAMES
+            return true
+        end
+        return nil, "Space did not launch an active bullet"
+    end
+
+    if phase == "waiting for alien collision" then
+        local live_aliens = count_live_aliens()
+        if live_aliens < live_aliens_at_start and score_is_nonzero() then
+            local metrics = analyze_pixels()
+            local error_message = screen:snapshot("mame-game-collision.png")
+            if error_message then
+                fail("collision snapshot failed: " .. tostring(error_message))
+            end
+            print(string.format(
+                "MC-10 game collision: PASS live-aliens=%d->%d bullet-active=%d score=%02X%02X%02X%02X",
+                live_aliens_at_start,
+                live_aliens,
+                read_byte(GAME_BULLET_ACTIVE),
+                read_byte(GAME_SCORE_0),
+                read_byte(GAME_SCORE_1),
+                read_byte(GAME_SCORE_2),
+                read_byte(GAME_SCORE_3)))
+            print(string.format(
+                "MC-10 game collision pixels: size=%dx%d blue=%d green=%d red=%d yellow=%d other=%d",
+                metrics.width,
+                metrics.height,
+                metrics.counts.blue,
+                metrics.counts.green,
+                metrics.counts.red,
+                metrics.counts.yellow,
+                metrics.counts.other))
+            print("MC-10 game regression: PASS")
+            phase = "complete"
+            machine:exit()
+            return true
+        end
+        return nil, string.format(
+            "keyboard-fired bullet did not collide with an alien: live=%d/%d score=%02X%02X%02X%02X",
+            live_aliens,
+            live_aliens_at_start,
+            read_byte(GAME_SCORE_0),
+            read_byte(GAME_SCORE_1),
+            read_byte(GAME_SCORE_2),
+            read_byte(GAME_SCORE_3))
+    end
+
+    return nil, "unknown game input phase: " .. phase
 end
 
 frame_subscription = emu.add_machine_frame_notifier(function()
@@ -356,6 +514,8 @@ frame_subscription = emu.add_machine_frame_notifier(function()
         keyboard:post_coded("EXEC{ENTER}")
         exec_sent = true
         deadline = frame + GAME_TIMEOUT_FRAMES
+        phase = "waiting for initial game screen"
+        phase_deadline = deadline
         print(string.format("MC-10 keyboard: EXEC{ENTER} at frame %d", frame))
     end
 
@@ -363,16 +523,16 @@ frame_subscription = emu.add_machine_frame_notifier(function()
         trace_state("waiting")
     end
 
-    if exec_sent and frame <= deadline and game_main_loop_active() then
-        local ok, message = verify_initial_screen()
+    if exec_sent and phase ~= "complete" and frame <= phase_deadline and game_main_loop_active() then
+        local ok, message = verify_game_input()
         if ok then
             return
         end
         last_message = message
-        if frame == deadline then
+        if frame == phase_deadline then
             fail(message or "initial game screen did not render")
         end
-    elseif exec_sent and frame > deadline then
-        fail(last_message or "initial game screen did not render before timeout")
+    elseif exec_sent and phase ~= "complete" and frame > phase_deadline then
+        fail(last_message or (phase .. " timed out"))
     end
 end)
