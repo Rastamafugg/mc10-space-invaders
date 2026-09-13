@@ -227,11 +227,15 @@ screen, checking the zero score, three lives, player and formation positions,
 all 55 live alien entries, active shields, blue CG3 background, five colored
 alien rows, shield structures, player ship, and bottom HUD. It saves the proof
 images as `build/mame-snapshots/mame-game-initial.png`,
-`mame-game-fired.png`, and `mame-game-collision.png`. It then posts A and D
+`mame-game-fired.png`, `mame-game-collision.png`, `mame-game-alien-shot.png`,
+and `mame-game-shield-damage.png`. It then posts A and D
 key events, verifies player movement, posts `{SPACE}`, verifies the bullet
 launch state, and waits for that bullet to remove a live alien and increase the
-score. A successful run prints movement, firing, collision, and
-`MC-10 game regression: PASS` markers.
+score. It then verifies a naturally activated alien shot and uses a deterministic
+MAME memory fixture to place an active shot one update above a lit shield pixel;
+the normal alien-shot update must deactivate the shot and reduce the shield's
+yellow-pixel count. A successful run prints movement, firing, alien-shot,
+collision, shield-damage, and `MC-10 game regression: PASS` markers.
 
 Run it after rebuilding the game:
 

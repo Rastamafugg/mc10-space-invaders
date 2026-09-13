@@ -28,7 +28,10 @@ local GAME_PLAYER_X = 0x00E8
 local GAME_BULLET_X = 0x00E9
 local GAME_BULLET_Y = 0x00EA
 local GAME_BULLET_ACTIVE = 0x00EB
+local GAME_ALIEN_SHOT_X = 0x00EC
+local GAME_ALIEN_SHOT_Y = 0x00ED
 local GAME_ALIEN_SHOT_ACTIVE = 0x00EE
+local GAME_ALIEN_SHOT_TICK = 0x00EF
 local GAME_INVADER_X = 0x00F0
 local GAME_INVADER_Y = 0x00F1
 local GAME_BONUS_ACTIVE = 0x00F6
@@ -42,6 +45,10 @@ local GAME_TIMEOUT_FRAMES = 600
 local ACTIVE_WIDTH = 256
 local ACTIVE_HEIGHT = 192
 local ACTIVE_PIXELS = ACTIVE_WIDTH * ACTIVE_HEIGHT
+local SHIELD_LEFT = 2 * 16
+local SHIELD_TOP = 2 * 70
+local SHIELD_RIGHT = 2 * 28
+local SHIELD_BOTTOM = 2 * 77
 
 assert(cassette, "MC-10 cassette device not found")
 assert(screen, "MC-10 screen device not found")
@@ -64,6 +71,7 @@ local initial_player_x = nil
 local left_player_x = nil
 local right_player_x = nil
 local live_aliens_at_start = 55
+local shield_yellow_before = nil
 
 local function post_game_key(code, description, next_phase)
     keyboard:post_coded(code)
@@ -289,6 +297,16 @@ local function score_is_nonzero()
         or read_byte(GAME_SCORE_3) ~= 0
 end
 
+local function shield_yellow_count(metrics)
+    return count_region(
+        metrics,
+        "yellow",
+        SHIELD_LEFT,
+        SHIELD_TOP,
+        SHIELD_RIGHT,
+        SHIELD_BOTTOM)
+end
+
 local function verify_initial_screen()
     local state, state_error = game_state_ready()
     if not state then
@@ -479,9 +497,8 @@ local function verify_game_input()
                 metrics.counts.red,
                 metrics.counts.yellow,
                 metrics.counts.other))
-            print("MC-10 game regression: PASS")
-            phase = "complete"
-            machine:exit()
+            phase = "waiting for natural alien shot"
+            phase_deadline = frame + GAME_TIMEOUT_FRAMES
             return true
         end
         return nil, string.format(
@@ -492,6 +509,83 @@ local function verify_game_input()
             read_byte(GAME_SCORE_1),
             read_byte(GAME_SCORE_2),
             read_byte(GAME_SCORE_3))
+    end
+
+    if phase == "waiting for natural alien shot" then
+        if read_byte(GAME_ALIEN_SHOT_ACTIVE) ~= 0 then
+            local shot_x = read_byte(GAME_ALIEN_SHOT_X)
+            local shot_y = read_byte(GAME_ALIEN_SHOT_Y)
+            if shot_x > 0x1F then
+                return nil, string.format("alien shot X is outside the playfield: %02X", shot_x)
+            end
+            if shot_y < 0x20 or shot_y > 0x5E then
+                return nil, string.format("alien shot Y is outside the descent path: %02X", shot_y)
+            end
+            local error_message = screen:snapshot("mame-game-alien-shot.png")
+            if error_message then
+                fail("alien-shot snapshot failed: " .. tostring(error_message))
+            end
+            print(string.format(
+                "MC-10 game input: ALIEN SHOT PASS shot=%02X/%02X tick=%02X",
+                shot_x,
+                shot_y,
+                read_byte(GAME_ALIEN_SHOT_TICK)))
+
+            local metrics = analyze_pixels()
+            shield_yellow_before = shield_yellow_count(metrics)
+            if read_byte(GAME_SHIELDS_ACTIVE) == 0 then
+                return nil, "shields became inactive before the shield-damage fixture"
+            end
+            if shield_yellow_before < 20 then
+                return nil, string.format(
+                    "first shield has insufficient yellow pixels before damage: %d",
+                    shield_yellow_before)
+            end
+
+            -- Keep the natural activation check above, then place the active
+            -- projectile one update above a known lit pixel in the first
+            -- shield. This makes shield damage deterministic while the normal
+            -- game_alien_shot_update routine performs the collision.
+            program_space:write_u8(GAME_ALIEN_SHOT_X, 0x04)
+            program_space:write_u8(GAME_ALIEN_SHOT_Y, 0x45)
+            program_space:write_u8(GAME_ALIEN_SHOT_TICK, 0x01)
+            program_space:write_u8(GAME_ALIEN_SHOT_ACTIVE, 0x01)
+            print("MC-10 game fixture: alien shot seeded at shield X=04 Y=45 TICK=01")
+            phase = "waiting for shield damage"
+            phase_deadline = frame + GAME_TIMEOUT_FRAMES
+            return true
+        end
+        return nil, "alien shot did not become active"
+    end
+
+    if phase == "waiting for shield damage" then
+        if read_byte(GAME_ALIEN_SHOT_ACTIVE) == 0 then
+            local metrics = analyze_pixels()
+            local shield_yellow_after = shield_yellow_count(metrics)
+            if shield_yellow_after >= shield_yellow_before then
+                return nil, string.format(
+                    "alien shot ended without reducing first-shield yellow pixels: %d->%d",
+                    shield_yellow_before,
+                    shield_yellow_after)
+            end
+            local error_message = screen:snapshot("mame-game-shield-damage.png")
+            if error_message then
+                fail("shield-damage snapshot failed: " .. tostring(error_message))
+            end
+            print(string.format(
+                "MC-10 game shield damage: PASS yellow=%d->%d shot-active=%d",
+                shield_yellow_before,
+                shield_yellow_after,
+                read_byte(GAME_ALIEN_SHOT_ACTIVE)))
+            print("MC-10 game regression: PASS")
+            phase = "complete"
+            machine:exit()
+            return true
+        end
+        return nil, string.format(
+            "seeded alien shot has not reached the shield: y=%02X active=%d",
+            read_byte(GAME_ALIEN_SHOT_Y),
+            read_byte(GAME_ALIEN_SHOT_ACTIVE))
     end
 
     return nil, "unknown game input phase: " .. phase

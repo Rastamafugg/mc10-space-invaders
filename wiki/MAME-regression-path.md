@@ -72,7 +72,10 @@ pixels for the opening screen: zero score, three lives, 55 live aliens,
 shields, the blue CG3 surface, five colored alien rows, the player ship, and
 the bottom HUD. It then posts `A`, `D`, and `{SPACE}` through MAME's natural
 keyboard interface, verifies player movement and bullet launch, and waits for
-the launched bullet to remove one alien and increase the score.
+the launched bullet to remove one alien and increase the score. It verifies a
+natural alien-shot activation, then seeds a second active shot immediately
+above a known lit shield pixel through MAME program-space writes. The normal
+alien-shot update must deactivate that shot and reduce the shield pixel count.
 
 ```text
 mame.exe mc10 -noreadconfig -ramsize 20K \
@@ -86,8 +89,9 @@ mame.exe mc10 -noreadconfig -ramsize 20K \
 ```
 
 The expected result is `MC-10 game regression: PASS`, with
-`mame-game-initial.png`, `mame-game-fired.png`, and
-`mame-game-collision.png` in the snapshot directory. The harness analyzes the
+`mame-game-initial.png`, `mame-game-fired.png`, `mame-game-collision.png`,
+`mame-game-alien-shot.png`, and `mame-game-shield-damage.png` in the snapshot
+directory. The harness analyzes the
 active 256x192 surface inside MAME's 372x243 screen capture and ignores the
 border. It verifies a deterministic opening render and one keyboard-controlled
 gameplay path, not all later gameplay rules or physical MC6847 `FS` phase.
