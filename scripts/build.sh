@@ -20,13 +20,18 @@ case "$TARGET" in
         PREFIX="timing-calibrator"
         CASSETTE_NAME="FSCAL"
         ;;
+    irq1)
+        SOURCE="$ROOT/src/irq1-sanity-test.s"
+        PREFIX="irq1-sanity"
+        CASSETTE_NAME="IRQ1TEST"
+        ;;
     check|clean)
         SOURCE="$ROOT/src/main.s"
         PREFIX="space-invaders"
         CASSETTE_NAME="SPACEINV"
         ;;
     *)
-        printf '%s\n' "Usage: scripts/build.sh {build|utility|calibrator|check|clean}" >&2
+        printf '%s\n' "Usage: scripts/build.sh {build|utility|calibrator|irq1|check|clean}" >&2
         exit 2
         ;;
 esac
@@ -45,7 +50,7 @@ MAP="$BUILD_DIR/$PREFIX.map"
 CASSETTE="$BUILD_DIR/$PREFIX.c10"
 
 usage() {
-    printf '%s\n' "Usage: scripts/build.sh {build|utility|calibrator|check|clean}"
+    printf '%s\n' "Usage: scripts/build.sh {build|utility|calibrator|irq1|check|clean}"
 }
 
 check_tools() {
@@ -103,7 +108,7 @@ clean() {
 }
 
 case "$TARGET" in
-    build|utility|calibrator) build ;;
+    build|utility|calibrator|irq1) build ;;
     check) check ;;
     clean) clean ;;
     *) usage >&2; exit 2 ;;

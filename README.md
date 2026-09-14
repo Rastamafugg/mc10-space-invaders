@@ -59,6 +59,35 @@ box height and `W`/`S` moves it vertically.
 See [the calibrator procedure](docs/timer-compare-test.md#live-timing-calibrator)
 and its [visual-witness section](docs/timer-compare-test.md#visual-witnesses).
 
+The IRQ1 sanity image is a separate bare-MC-10 cassette test:
+
+```powershell
+.\space-invaders.ps1 irq1
+.\space-invaders.ps1 irq1-run
+```
+
+It installs an IRQ1 handler at the MC-10 RAM vector `$420C`, disables all
+MC6803 timer interrupt enables, enables CPU interrupts, and observes the
+counter for multiple video fields. The expected screen is `IRQ1: INACTIVE`
+with `IRQ1 COUNT: 00`. The automated WSLg check is:
+
+```powershell
+.\space-invaders.ps1 irq1-test
+```
+
+This check uses the stock MC-10 XRoar path and does not attach an MCX
+cartridge. MAME verification uses the permanent Lua harness described in
+[the IRQ1 test procedure](docs/irq1-sanity-test.md).
+
+The MAME harness has a PowerShell launcher:
+
+```powershell
+.\mame-irq1-test.ps1
+```
+
+Use `-MamePath`, `-RomPath`, `-SecondsToRun`, or `-SkipBuild` to override its
+defaults.
+
 The build emits:
 
 - `build/space-invaders.bin` — raw MC6803 program.
@@ -178,6 +207,27 @@ without WSLg, run the portable stages with:
 ```text
 python3 scripts/regression.py --skip-emulator
 ```
+
+### IRQ1 sanity harness
+
+The IRQ1 cassette is checked independently because it does not require MCX
+bank hardware or a direct-boot ROM. MAME reads the handler counter, completion
+flag, and status byte from emulated RAM, then saves
+`build/mame-snapshots/mame-irq1-sanity.png`. XRoar is checked by the
+`irq1-test` mode, which captures the screen and verifies the inactive status
+and matching zero-count glyphs.
+
+The expected result in both emulators is:
+
+```text
+IRQ1: INACTIVE
+IRQ1 COUNT: 00
+```
+
+`IRQ1: ACTIVE` or a nonzero count means that the CPU accepted an IRQ1 during
+the observation window. A zero count proves that the configured emulator path
+did not assert a CPU-visible IRQ1; it is not, by itself, an electrical proof
+about every physical MC-10 or MCX-128 revision.
 
 ### MAME Lua calibrator harness
 

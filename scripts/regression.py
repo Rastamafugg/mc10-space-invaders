@@ -138,6 +138,9 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     calibrator_values = check_program_artifacts(
         root, build_dir, "timing-calibrator", "timing-calibrator.s"
     )
+    irq1_values = check_program_artifacts(
+        root, build_dir, "irq1-sanity", "irq1-sanity-test.s"
+    )
     game_values = check_program_artifacts(root, build_dir, "space-invaders", "main.s")
 
     source = root / "src" / "environment-test.s"
@@ -164,6 +167,30 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
     missing_signatures = [signature for signature in signatures if signature not in source_text]
     if missing_signatures:
         fail(f"source is missing MCX bank signatures: {', '.join(missing_signatures)}")
+
+    irq1_source = root / "src" / "irq1-sanity-test.s"
+    irq1_text = irq1_source.read_text(encoding="ascii")
+    irq1_source_tokens = (
+        "IRQ1_VECTOR",
+        "IRQ1_COUNT",
+        "IRQ1_DONE",
+        "IRQ1_STATUS",
+        "TIMER_CSR",
+        "irq1_handler",
+        "CLI",
+        "RTI",
+        "irq_window_inactive",
+        "irq_inactive_text",
+        "irq_write_count",
+    )
+    missing_irq1_source_tokens = [
+        token for token in irq1_source_tokens if token not in irq1_text
+    ]
+    if missing_irq1_source_tokens:
+        fail(
+            "IRQ1 sanity source is missing regression markers: "
+            + ", ".join(missing_irq1_source_tokens)
+        )
 
     calibrator_source = root / "src" / "timing-calibrator.s"
     calibrator_text = calibrator_source.read_text(encoding="ascii")
@@ -319,6 +346,55 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
             + ", ".join(missing_mame_game_harness_tokens)
         )
 
+    mame_irq1_harness = root / "scripts" / "mame-irq1-regression.lua"
+    if not mame_irq1_harness.is_file():
+        fail(f"missing MAME Lua IRQ1 harness: {mame_irq1_harness}")
+    mame_irq1_harness_text = mame_irq1_harness.read_text(encoding="ascii")
+    mame_irq1_harness_tokens = (
+        'keyboard:post_coded("CLOADM{ENTER}")',
+        'keyboard:post_coded("EXEC{ENTER}")',
+        "cassette:play()",
+        "cassette:stop()",
+        "program_space:read_u8",
+        "IRQ1_COUNT",
+        "IRQ1_DONE",
+        "IRQ1_STATUS",
+        '"mame-irq1-sanity.png"',
+        "MC-10 IRQ1 sanity: PASS",
+        "machine:exit()",
+    )
+    missing_mame_irq1_harness_tokens = [
+        token for token in mame_irq1_harness_tokens if token not in mame_irq1_harness_text
+    ]
+    if missing_mame_irq1_harness_tokens:
+        fail(
+            "MAME Lua IRQ1 harness is missing regression markers: "
+            + ", ".join(missing_mame_irq1_harness_tokens)
+        )
+
+    xroar_irq1_runner = root / "scripts" / "xroar-irq1-regression.py"
+    if not xroar_irq1_runner.is_file():
+        fail(f"missing XRoar IRQ1 runner: {xroar_irq1_runner}")
+    xroar_irq1_text = xroar_irq1_runner.read_text(encoding="ascii")
+    xroar_irq1_tokens = (
+        '"-machine",\n        "mc10"',
+        '"-run",',
+        '"irq1-sanity.c10"',
+        "xwininfo",
+        "x11_xroar.py",
+        "IRQ1: INACTIVE",
+        "count_zero_pair",
+        "XRoar IRQ1 sanity: PASS",
+    )
+    missing_xroar_irq1_tokens = [
+        token for token in xroar_irq1_tokens if token not in xroar_irq1_text
+    ]
+    if missing_xroar_irq1_tokens:
+        fail(
+            "XRoar IRQ1 runner is missing regression markers: "
+            + ", ".join(missing_xroar_irq1_tokens)
+        )
+
     manual_lua = root / "scripts" / "mame-manual-play.lua"
     if not manual_lua.is_file():
         fail(f"missing MAME manual-play Lua script: {manual_lua}")
@@ -366,6 +442,27 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
             + ", ".join(missing_manual_launcher_tokens)
         )
 
+    irq1_launcher = root / "mame-irq1-test.ps1"
+    if not irq1_launcher.is_file():
+        fail(f"missing MAME IRQ1 launcher: {irq1_launcher}")
+    irq1_launcher_text = irq1_launcher.read_text(encoding="ascii")
+    irq1_launcher_tokens = (
+        "mame-irq1-regression.lua",
+        "SecondsToRun",
+        "-autoboot_script",
+        "-cass",
+        "-ramsize",
+        "irq1",
+    )
+    missing_irq1_launcher_tokens = [
+        token for token in irq1_launcher_tokens if token not in irq1_launcher_text
+    ]
+    if missing_irq1_launcher_tokens:
+        fail(
+            "MAME IRQ1 launcher is missing markers: "
+            + ", ".join(missing_irq1_launcher_tokens)
+        )
+
     game_source = root / "src" / "main.s"
     game_text = game_source.read_text(encoding="ascii")
     game_tokens = (
@@ -404,13 +501,17 @@ def check_artifacts(root: Path, build_dir: Path) -> None:
         "regression: build artifacts pass "
         f"(utility ${utility_values['start']:04X}/{utility_values['size']} bytes, "
         f"calibrator ${calibrator_values['start']:04X}/{calibrator_values['size']} bytes, "
+        f"irq1 ${irq1_values['start']:04X}/{irq1_values['size']} bytes, "
         f"game ${game_values['start']:04X}/{game_values['size']} bytes)"
     )
     print("regression: cassette framing pass")
     print("regression: source covers all eight MCX bank signatures")
+    print("regression: IRQ1 inactive diagnostic markers present")
     print("regression: live timing calibrator markers present")
     print("regression: MAME Lua pixel harness markers present")
     print("regression: MAME Lua game harness markers present")
+    print("regression: MAME and XRoar IRQ1 harness markers present")
+    print("regression: MAME IRQ1 launcher markers present")
     print("regression: MAME manual-play launcher markers present")
     print("regression: CG3 game layout and gameplay markers present")
 

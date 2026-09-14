@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('build', 'run', 'utility', 'utility-run', 'calibrator', 'calibrator-run', 'test', 'check', 'clean')]
+    [ValidateSet('build', 'run', 'utility', 'utility-run', 'calibrator', 'calibrator-run', 'irq1', 'irq1-run', 'irq1-test', 'test', 'check', 'clean')]
     [string]$Mode = 'build'
 )
 
@@ -12,15 +12,17 @@ if ($LASTEXITCODE -ne 0 -or -not $linuxRoot) {
     throw 'WSL could not resolve the project directory.'
 }
 
-if ($Mode -in @('run', 'utility-run', 'calibrator-run')) {
+if ($Mode -in @('run', 'utility-run', 'calibrator-run', 'irq1-run')) {
     $buildTarget = switch ($Mode) {
         'utility-run' { 'utility'; break }
         'calibrator-run' { 'calibrator'; break }
+        'irq1-run' { 'irq1'; break }
         default { 'build' }
     }
     $cassetteName = switch ($Mode) {
         'utility-run' { 'environment-test.c10'; break }
         'calibrator-run' { 'timing-calibrator.c10'; break }
+        'irq1-run' { 'irq1-sanity.c10'; break }
         default { 'space-invaders.c10' }
     }
     & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" $buildTarget
@@ -29,7 +31,11 @@ if ($Mode -in @('run', 'utility-run', 'calibrator-run')) {
     }
     $emulator = if ($env:MC10_XROAR) { $env:MC10_XROAR } else { '/usr/local/bin/xroar' }
     $cassette = "$linuxRoot/build/$cassetteName"
-    if ($env:MC10_MCX_DIRECT_ROM -or $env:MC10_MCX_ROM) {
+    if ($Mode -eq 'irq1-run') {
+        # IRQ1 is a bare-MC-10 sanity check. Do not let an MCX cartridge
+        # configured for the game or diagnostics change the machine path.
+        $emulatorArgs = @('-machine', 'mc10', '-run', $cassette)
+    } elseif ($env:MC10_MCX_DIRECT_ROM -or $env:MC10_MCX_ROM) {
         $emulatorArgs = @('-machine', 'mc10', '-cart', 'mcx128')
         $mcxRom = if ($env:MC10_MCX_DIRECT_ROM) { $env:MC10_MCX_DIRECT_ROM } else { $env:MC10_MCX_ROM }
         if ($mcxRom -match '^[A-Za-z]:[\\/]') {
@@ -84,6 +90,10 @@ if ($Mode -eq 'test') {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" irq1
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
 
     $testArgs = @()
     if ($env:MC10_XROAR) {
@@ -109,6 +119,26 @@ if ($Mode -eq 'test') {
     }
 
     & wsl.exe --cd $linuxRoot --exec python3 "$linuxRoot/scripts/regression.py" @testArgs
+    exit $LASTEXITCODE
+}
+
+if ($Mode -eq 'irq1-test') {
+    & wsl.exe --cd $linuxRoot --exec bash "$linuxRoot/scripts/build.sh" irq1
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    $testArgs = @('--build-dir', "$linuxRoot/build")
+    if ($env:MC10_XROAR) {
+        $testEmulator = $env:MC10_XROAR
+        if ($testEmulator -match '^[A-Za-z]:[\\/]') {
+            $testEmulator = (& wsl.exe --exec wslpath -a -u $testEmulator).Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $testEmulator) {
+                throw 'WSL could not resolve the XRoar path.'
+            }
+        }
+        $testArgs += @('--xroar', $testEmulator)
+    }
+    & wsl.exe --cd $linuxRoot --exec python3 "$linuxRoot/scripts/xroar-irq1-regression.py" @testArgs
     exit $LASTEXITCODE
 }
 

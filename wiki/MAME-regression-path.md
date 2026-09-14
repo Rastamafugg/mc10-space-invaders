@@ -2,6 +2,8 @@
 
 [Home](Home) · [Emulator lessons](Emulator-workflows-and-tool-lessons) · [Cassette loading](MC-10-cassette-loading)
 
+The standalone CPU interrupt check is documented in [IRQ1 sanity test](IRQ1-sanity-test).
+
 ## Why MAME was upgraded
 
 The installed MAME 0.220 driver did not expose an MCX-128 slot and rejected the project's `.c10` cassette image. MAME 0.289 exposes the MC-10 `mcx128` cartridge slot, accepts `.c10`, and exposes 4K, 8K, 20K, and 32K RAM selections.
